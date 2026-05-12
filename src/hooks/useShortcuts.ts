@@ -9,64 +9,54 @@ interface ShortcutProps {
 }
 
 export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
-  const { toggleSidebar, toggleTheme, setQuickOpenOpen, setHelpOpen, setGlobalSearchOpen, focusedElement, setFocusedElement } = useUIStore();
-  const setPaletteOpen = useCommandStore((state) => state.setIsOpen);
-  const { activeNote, notes, openNotes, setActiveNote, closeNote, selectedNoteIndex, setSelectedNoteIndex } = useNoteStore();
   const { openNote, createNote, renameNote, deleteNote } = useVault();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMod = e.ctrlKey || e.metaKey;
+      const { focusedElement, setFocusedElement, toggleSidebar, toggleTheme, setQuickOpenOpen, setHelpOpen, setGlobalSearchOpen } = useUIStore.getState();
+      const { setIsOpen: setPaletteOpen } = useCommandStore.getState();
+      const { notes, activeNote, selectedNoteIndex, setSelectedNoteIndex, closeNote } = useNoteStore.getState();
 
       // Global Esc: Close palettes or focus editor
       if (e.key === 'Escape') {
-        setPaletteOpen(false);
-        setQuickOpenOpen(false);
-        setHelpOpen(false);
-        setGlobalSearchOpen(false);
-        setFocusedElement('editor');
+        const isAnyPaletteOpen = useCommandStore.getState().isOpen || useUIStore.getState().quickOpenOpen || useUIStore.getState().helpOpen || useUIStore.getState().globalSearchOpen;
+        
+        if (isAnyPaletteOpen) {
+          setPaletteOpen(false);
+          setQuickOpenOpen(false);
+          setHelpOpen(false);
+          setGlobalSearchOpen(false);
+        } else {
+          setFocusedElement('editor');
+        }
         return;
       }
-      
-      // ... later ...
+
       // Global Search: Ctrl + Shift + F
       if (isMod && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
         e.preventDefault();
         setGlobalSearchOpen(true);
+        return;
       }
 
       // If a modal is open, don't trigger other shortcuts
-      const isModalOpen = useCommandStore.getState().isOpen || useUIStore.getState().quickOpenOpen || useUIStore.getState().helpOpen;
+      const isModalOpen = useCommandStore.getState().isOpen || useUIStore.getState().quickOpenOpen || useUIStore.getState().helpOpen || useUIStore.getState().globalSearchOpen;
       if (isModalOpen) return;
 
-      // Focus Sidebar: Alt + 1 or Ctrl + \ (when sidebar is hidden, show it)
-      if (isMod && e.key === '1') {
+      // Focus Sidebar: Alt + 1
+      if (e.altKey && e.key === '1') {
         e.preventDefault();
         setFocusedElement('sidebar');
       }
 
       // Focus Editor: Alt + 2
-      if (isMod && e.key === '2') {
+      if (e.altKey && e.key === '2') {
         e.preventDefault();
         setFocusedElement('editor');
       }
 
-      // New Note: Ctrl + N
-      if (isMod && e.key === 'n') {
-        e.preventDefault();
-        const name = prompt('Note name:');
-        if (name) createNote(name);
-      }
-
-      // Save Note: Ctrl + S (Force save)
-      if (isMod && e.key === 's') {
-        e.preventDefault();
-        if (activeNote) {
-          // Manual save logic if needed, though auto-save is on
-        }
-      }
-
-      // Navigation (Tier 1) - Only when sidebar is focused
+      // Sidebar Specific Navigation (Tier 1) - Vim keys
       if (focusedElement === 'sidebar') {
         if (e.key === 'j') {
           e.preventDefault();
@@ -81,27 +71,42 @@ export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
             openNote(note);
             setFocusedElement('editor');
           }
-        } else if (e.key === 'o') {
+        } else if (e.key === 'o' && !isMod) {
           e.preventDefault();
           const name = prompt('New note:');
           if (name) createNote(name);
-        } else if (e.key === 'r') {
+        } else if (e.key === 'r' && !isMod) {
           e.preventDefault();
           const note = notes[selectedNoteIndex];
           if (note) {
             const name = prompt('Rename to:', note.name);
             if (name) renameNote(note, name);
           }
-        } else if (e.key === 'd') {
+        } else if (e.key === 'd' && !isMod) {
           e.preventDefault();
           const note = notes[selectedNoteIndex];
           if (note && confirm(`Delete "${note.name}"?`)) {
             deleteNote(note);
           }
-        } else if (e.key === '/') {
+        } else if (e.key === '/' && !isMod) {
           e.preventDefault();
           setQuickOpenOpen(true);
         }
+      }
+
+      // Global Shortcuts (Working even when Editor is focused)
+      
+      // New Note: Ctrl + N
+      if (isMod && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        const name = prompt('Note name:');
+        if (name) createNote(name);
+      }
+
+      // Open Vault: Ctrl + O
+      if (isMod && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        onOpenVault();
       }
 
       // Toggle Sidebar: Ctrl + \
@@ -110,68 +115,38 @@ export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
         toggleSidebar();
       }
 
-      // Open Vault: Ctrl + O
-      if (isMod && e.key === 'o') {
-        e.preventDefault();
-        onOpenVault();
-      }
-
-      // Help / Shortcuts: Ctrl + ? or Ctrl + /
-      if (isMod && (e.key === '?' || e.key === '/')) {
+      // Help / Shortcuts: Ctrl + ?
+      if (isMod && e.key === '?') {
         e.preventDefault();
         setHelpOpen(true);
       }
 
       // Quick Open: Ctrl + P
-      if (isMod && e.key === 'p') {
+      if (isMod && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         setQuickOpenOpen(true);
       }
 
-      // Close Note/Tab: Ctrl + W
-      if (isMod && e.key === 'w') {
-        e.preventDefault();
-        if (activeNote) closeNote(activeNote.path);
-      }
-
-      // Switch Tabs: Ctrl (+ Shift) + Tab
-      if (isMod && e.key === 'Tab') {
-        e.preventDefault();
-        if (openNotes.length > 1) {
-          const currentIndex = openNotes.findIndex(n => n.path === activeNote?.path);
-          const nextIndex = e.shiftKey 
-            ? (currentIndex - 1 + openNotes.length) % openNotes.length
-            : (currentIndex + 1) % openNotes.length;
-          setActiveNote(openNotes[nextIndex]);
-        }
-      }
-
-      // Open Command Palette: Ctrl + K
-      if (isMod && e.key === 'k') {
+      // Command Palette: Ctrl + K
+      if (isMod && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setPaletteOpen(true);
       }
 
-      // Quick Open: Ctrl + P
-      if (isMod && e.key === 'p') {
-        e.preventDefault();
-        console.log('Open Quick Open');
-      }
-
-      // New Note: Ctrl + N
-      if (isMod && e.key === 'n') {
-        e.preventDefault();
-        console.log('New Note');
-      }
-      
       // Toggle Theme: Ctrl + Shift + L
-      if (isMod && e.shiftKey && e.key === 'L') {
+      if (isMod && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
         e.preventDefault();
         toggleTheme();
       }
+
+      // Tab Management
+      if (isMod && (e.key === 'w' || e.key === 'W')) {
+        e.preventDefault();
+        if (activeNote) closeNote(activeNote.path);
+      }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar, toggleTheme, onOpenVault]);
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase to beat CodeMirror
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [onOpenVault, openNote, createNote, renameNote, deleteNote]);
 };

@@ -55,15 +55,16 @@ export const useVault = () => {
   const saveNote = async (note: Note, content: string) => {
     try {
       await writeTextFile(note.path, content);
-      // Update local state as well
-      const updatedNotes = notes.map(n => n.path === note.path ? { ...n, content } : n);
+      // Update local state as well using functional update or direct store access
+      const currentNotes = useNoteStore.getState().notes;
+      const updatedNotes = currentNotes.map(n => n.path === note.path ? { ...n, content } : n);
       setNotes(updatedNotes);
     } catch (err) {
       console.error('Failed to save note:', err);
     }
   };
 
-  const loadNotes = async (path: string) => {
+  const loadNotes = async (path: string): Promise<Note[]> => {
     try {
       const entries = await readDir(path);
       const fetchedNotes: Note[] = [];
@@ -92,8 +93,10 @@ export const useVault = () => {
       );
 
       setNotes(notesWithContent);
+      return notesWithContent;
     } catch (err) {
       console.error('Failed to load notes:', err);
+      return [];
     }
   };
 
@@ -106,7 +109,11 @@ export const useVault = () => {
 
     if (selected && typeof selected === 'string') {
       setVaultPath(selected);
-      await loadNotes(selected);
+      const loaded = await loadNotes(selected);
+      if (loaded.length > 0) {
+        openNote(loaded[0]);
+        useNoteStore.getState().setSelectedNoteIndex(0);
+      }
     }
   };
 
@@ -120,8 +127,13 @@ export const useVault = () => {
   };
 
   useEffect(() => {
-    if (vaultPath) {
-      loadNotes(vaultPath);
+    if (vaultPath && notes.length === 0) {
+      loadNotes(vaultPath).then(loaded => {
+        if (loaded.length > 0 && !activeNote) {
+          openNote(loaded[0]);
+          useNoteStore.getState().setSelectedNoteIndex(0);
+        }
+      });
     }
   }, [vaultPath]);
 

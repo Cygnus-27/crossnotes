@@ -18,6 +18,9 @@ export const Editor: React.FC = () => {
   const { saveNote } = useVault();
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const activeNoteRef = useRef(activeNote);
+  activeNoteRef.current = activeNote;
+
   useEffect(() => {
     if (!editorRef.current) return;
 
@@ -52,10 +55,11 @@ export const Editor: React.FC = () => {
             
             setEditorInfo({ line: line.number, col, wordCount });
 
-            if (update.docChanged && activeNote) {
+            if (update.docChanged && activeNoteRef.current) {
+               const currentNote = activeNoteRef.current;
                if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                autoSaveTimerRef.current = setTimeout(() => {
-                 saveNote(activeNote, text);
+                 saveNote(currentNote, text);
                }, 500); // 500ms debounce
             }
           }
@@ -76,17 +80,17 @@ export const Editor: React.FC = () => {
     };
   }, []);
 
-  // Update content when activeNote changes (if it's a different note)
+  // Update content when activeNote changes
   useEffect(() => {
     if (viewRef.current && activeNote) {
-      // Check if we need to reload the editor content
-      // We use a property to check if it's the same note to avoid overwriting current edits
-      if (viewRef.current.state.doc.toString() !== activeNote.content) {
-         // Only replace if the content is significantly different (init load)
-         // or if we have a better way to track "current note path"
+      const currentDoc = viewRef.current.state.doc.toString();
+      if (currentDoc !== activeNote.content) {
+        viewRef.current.dispatch({
+          changes: { from: 0, to: currentDoc.length, insert: activeNote.content || '' }
+        });
       }
     }
-  }, [activeNote]);
+  }, [activeNote?.path]); // Only reset when the FILE itself changes
 
   return <div ref={editorRef} style={{ height: '100%', width: '100%' }} />;
 };
