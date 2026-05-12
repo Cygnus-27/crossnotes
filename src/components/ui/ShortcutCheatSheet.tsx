@@ -53,6 +53,14 @@ export const ShortcutCheatSheet: React.FC<{ isOpen: boolean; onClose: () => void
                 <span style={{ color: 'var(--text-secondary)' }}>Command Palette</span>
                 <span className="keyboard-hint">Ctrl + K</span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Switch Note (Up)</span>
+                <span className="keyboard-hint">Ctrl + Up</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Switch Note (Down)</span>
+                <span className="keyboard-hint">Ctrl + Down</span>
+              </div>
               {commands.filter(c => !['global-search', 'global-search-open', 'quick-open', 'show-palette'].includes(c.id)).map(cmd => (
                 <div key={cmd.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{cmd.name}</span>

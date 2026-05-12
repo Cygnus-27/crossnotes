@@ -44,6 +44,7 @@ export const useCommands = () => {
     registerCommand({
       id: 'rename-note',
       name: 'Rename Current Note',
+      shortcut: 'Ctrl+Shift+R',
       description: 'Rename the currently selected or active note',
       action: () => {
         const note = activeNote || notes[selectedNoteIndex];
@@ -58,6 +59,7 @@ export const useCommands = () => {
     registerCommand({
       id: 'delete-note',
       name: 'Delete Note',
+      shortcut: 'Ctrl+Shift+D',
       description: 'Permanently delete the selected note',
       action: () => {
         const note = notes[selectedNoteIndex];
@@ -71,6 +73,7 @@ export const useCommands = () => {
     registerCommand({
       id: 'switch-to-tabs',
       name: 'Switch to Tabs Layout',
+      shortcut: 'Ctrl+Shift+T',
       description: 'Show multiple open notes as tabs',
       action: () => setLayoutMode('tabs'),
       category: 'Layout'
@@ -79,6 +82,7 @@ export const useCommands = () => {
     registerCommand({
       id: 'switch-to-history',
       name: 'Switch to History Layout',
+      shortcut: 'Ctrl+Shift+H',
       description: 'Show single note with history navigation',
       action: () => setLayoutMode('history'),
       category: 'Layout'

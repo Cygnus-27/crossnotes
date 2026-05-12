@@ -139,6 +139,39 @@ export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
         toggleTheme();
       }
 
+      // Rename Note: Ctrl + Shift + R
+      if (isMod && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+        e.preventDefault();
+        const { notes, activeNote, selectedNoteIndex } = useNoteStore.getState();
+        const note = activeNote || notes[selectedNoteIndex];
+        if (note) {
+          const name = prompt('New name:', note.name);
+          if (name) renameNote(note, name);
+        }
+      }
+
+      // Delete Note: Ctrl + Shift + D
+      if (isMod && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        e.preventDefault();
+        const { notes, activeNote, selectedNoteIndex } = useNoteStore.getState();
+        const note = activeNote || notes[selectedNoteIndex];
+        if (note && confirm(`Delete "${note.name}"?`)) {
+          deleteNote(note);
+        }
+      }
+
+      // Switch to Tabs: Ctrl + Shift + T
+      if (isMod && e.shiftKey && (e.key === 'T' || e.key === 't')) {
+        e.preventDefault();
+        useNoteStore.getState().setLayoutMode('tabs');
+      }
+
+      // Switch to History: Ctrl + Shift + H
+      if (isMod && e.shiftKey && (e.key === 'H' || e.key === 'h')) {
+        e.preventDefault();
+        useNoteStore.getState().setLayoutMode('history');
+      }
+
       // Save Note: Ctrl + S
       if (isMod && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
@@ -150,6 +183,32 @@ export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
       if (isMod && (e.key === 'w' || e.key === 'W')) {
         e.preventDefault();
         if (activeNote) closeNote(activeNote.path);
+      }
+
+      // Switch Note: Ctrl + Up/Down
+      if (isMod && e.key === 'ArrowUp') {
+        e.preventDefault();
+        const { notes, activeNote, setSelectedNoteIndex } = useNoteStore.getState();
+        if (notes.length <= 1) return;
+        const currentIndex = notes.findIndex(n => n.path === activeNote?.path);
+        const prevIndex = (currentIndex - 1 + notes.length) % notes.length;
+        const note = notes[prevIndex];
+        if (note) {
+          openNote(note);
+          setSelectedNoteIndex(prevIndex);
+        }
+      }
+      if (isMod && e.key === 'ArrowDown') {
+        e.preventDefault();
+        const { notes, activeNote, setSelectedNoteIndex } = useNoteStore.getState();
+        if (notes.length <= 1) return;
+        const currentIndex = notes.findIndex(n => n.path === activeNote?.path);
+        const nextIndex = (currentIndex + 1) % notes.length;
+        const note = notes[nextIndex];
+        if (note) {
+          openNote(note);
+          setSelectedNoteIndex(nextIndex);
+        }
       }
     };
 

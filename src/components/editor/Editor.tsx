@@ -5,7 +5,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { vim } from '@replit/codemirror-vim';
+import { vim, Vim } from '@replit/codemirror-vim';
 import { useNoteStore } from '../../store/noteStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useVault } from '../../hooks/useVault';
@@ -87,8 +87,28 @@ export const Editor: React.FC = () => {
 
     viewRef.current = view;
 
+    if (Vim && (Vim as any).on) {
+      try {
+        (Vim as any).on('mode-change', (data: any) => {
+          const mode = data.mode;
+          let label = 'NORMAL';
+          if (mode === 'insert') label = 'INSERT';
+          else if (mode === 'visual') label = 'VISUAL';
+          else if (mode === 'replace') label = 'REPLACE';
+          setEditorInfo({ vimMode: label });
+        });
+      } catch (err) {
+        console.error('Failed to attach Vim listener:', err);
+      }
+    }
+
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (Vim && (Vim as any).off) {
+        try {
+          (Vim as any).off('mode-change', () => {});
+        } catch (e) {}
+      }
       view.destroy();
     };
   }, []);

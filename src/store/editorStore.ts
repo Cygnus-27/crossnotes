@@ -4,12 +4,14 @@ interface EditorState {
   line: number;
   col: number;
   wordCount: number;
-  setEditorInfo: (info: { line: number; col: number; wordCount: number }) => void;
+  vimMode: string;
+  setEditorInfo: (info: Partial<{ line: number; col: number; wordCount: number; vimMode: string }>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
   line: 1,
   col: 1,
   wordCount: 0,
-  setEditorInfo: (info) => set(info),
+  vimMode: 'NORMAL',
+  setEditorInfo: (info) => set((state) => ({ ...state, ...info })),
 }));

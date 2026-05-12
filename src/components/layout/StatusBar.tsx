@@ -4,12 +4,12 @@ import { useEditorStore } from '../../store/editorStore';
 
 export const StatusBar: React.FC = () => {
   const theme = useUIStore((state) => state.theme);
-  const { line, col, wordCount } = useEditorStore();
+  const { line, col, wordCount, vimMode } = useEditorStore();
 
   return (
     <div className="status-bar">
       <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, color: 'var(--accent)' }}>VIM</span>
+        <span style={{ fontWeight: 600, color: 'var(--accent)', minWidth: '60px' }}>{vimMode}</span>
         <span>UTF-8</span>
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
