@@ -67,6 +67,7 @@ export const useVault = () => {
       useNoteStore.setState({ notes: updatedNotes, isDirty: false });
     } catch (err) {
       console.error('Failed to save note:', err);
+      alert('Failed to save note. Please check permissions or folder path.\n' + err);
     }
   }, []);
 

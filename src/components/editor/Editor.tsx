@@ -29,13 +29,6 @@ export const Editor: React.FC = () => {
     const startState = EditorState.create({
       doc: activeNote?.content || '',
       extensions: [
-        vim(),
-        lineNumbers(),
-        highlightActiveLineGutter(),
-        history(),
-        highlightActiveLine(),
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
-        oneDark,
         keymap.of([
           {
             key: "Mod-s",
@@ -50,6 +43,13 @@ export const Editor: React.FC = () => {
           ...defaultKeymap,
           ...historyKeymap,
         ]),
+        vim(),
+        lineNumbers(),
+        highlightActiveLineGutter(),
+        history(),
+        highlightActiveLine(),
+        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        oneDark,
         EditorView.theme({
           "&": { height: "100%", fontSize: "14px" },
           ".cm-scroller": { fontFamily: "var(--font-mono)" },
@@ -68,9 +68,11 @@ export const Editor: React.FC = () => {
                const { setIsDirty } = useNoteStore.getState();
                setIsDirty(true);
                const currentNote = activeNoteRef.current;
+               const textToSave = update.state.doc.toString(); // Capture content NOW
+               
                if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                autoSaveTimerRef.current = setTimeout(() => {
-                 saveNoteRef.current(currentNote, state.doc.toString());
+                 saveNoteRef.current(currentNote, textToSave);
                }, 500); // 500ms debounce
             }
           }
