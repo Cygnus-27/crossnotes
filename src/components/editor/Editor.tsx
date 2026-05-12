@@ -17,6 +17,8 @@ export const Editor: React.FC = () => {
   const setEditorInfo = useEditorStore((state) => state.setEditorInfo);
   const { saveNote } = useVault();
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveNoteRef = useRef(saveNote);
+  saveNoteRef.current = saveNote;
 
   const activeNoteRef = useRef(activeNote);
   activeNoteRef.current = activeNote;
@@ -35,6 +37,16 @@ export const Editor: React.FC = () => {
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         oneDark,
         keymap.of([
+          {
+            key: "Mod-s",
+            run: () => {
+              const text = viewRef.current?.state.doc.toString() || '';
+              if (activeNoteRef.current) {
+                saveNoteRef.current(activeNoteRef.current, text);
+              }
+              return true;
+            }
+          },
           ...defaultKeymap,
           ...historyKeymap,
         ]),
@@ -50,16 +62,15 @@ export const Editor: React.FC = () => {
             const line = state.doc.lineAt(pos);
             const col = pos - line.from + 1;
             
-            const text = state.doc.toString();
-            const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-            
-            setEditorInfo({ line: line.number, col, wordCount });
+            setEditorInfo({ line: line.number, col, wordCount: state.doc.toString().trim() ? state.doc.toString().trim().split(/\s+/).length : 0 });
 
             if (update.docChanged && activeNoteRef.current) {
+               const { setIsDirty } = useNoteStore.getState();
+               setIsDirty(true);
                const currentNote = activeNoteRef.current;
                if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                autoSaveTimerRef.current = setTimeout(() => {
-                 saveNote(currentNote, text);
+                 saveNoteRef.current(currentNote, state.doc.toString());
                }, 500); // 500ms debounce
             }
           }

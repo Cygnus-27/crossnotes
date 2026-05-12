@@ -139,6 +139,13 @@ export const useShortcuts = ({ onOpenVault }: ShortcutProps) => {
         toggleTheme();
       }
 
+      // Save Note: Ctrl + S
+      if (isMod && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        // The actual save is handled by CodeMirror keymap for accuracy,
+        // but we prevent browser default here.
+      }
+
       // Tab Management
       if (isMod && (e.key === 'w' || e.key === 'W')) {
         e.preventDefault();

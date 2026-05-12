@@ -3,8 +3,8 @@ import { useNoteStore } from '../../store/noteStore';
 import { useUIStore } from '../../store/uiStore';
 
 export const Header: React.FC = () => {
-  const activeNote = useNoteStore((state) => state.activeNote);
-  const setHelpOpen = useUIStore((state) => state.setHelpOpen);
+  const { activeNote, isDirty } = useNoteStore();
+  const { setHelpOpen } = useUIStore();
 
   return (
     <header style={{
@@ -17,8 +17,20 @@ export const Header: React.FC = () => {
       justifyContent: 'space-between',
       flexShrink: 0
     }}>
-      <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
         {activeNote ? activeNote.name : 'CrossNotes'}
+        {isDirty && (
+          <span 
+            title="Unsaved changes"
+            style={{ 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              backgroundColor: 'var(--accent)', 
+              display: 'inline-block' 
+            }} 
+          />
+        )}
       </div>
       
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

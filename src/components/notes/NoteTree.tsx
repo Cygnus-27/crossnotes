@@ -4,15 +4,16 @@ import { useVault } from '../../hooks/useVault';
 import { useUIStore } from '../../store/uiStore';
 
 export const NoteTree: React.FC = () => {
-  const { notes, activeNote, selectedNoteIndex, setSelectedNoteIndex } = useNoteStore();
+  const { notes, activeNote, selectedNoteIndex, setSelectedNoteIndex, isDirty } = useNoteStore();
   const { openNote } = useVault();
-  const focusedElement = useUIStore(state => state.focusedElement);
+  const { focusedElement } = useUIStore();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
       {notes.map((note, index) => {
         const isActive = activeNote?.path === note.path;
         const isSelected = index === selectedNoteIndex && focusedElement === 'sidebar';
+        const showDirty = isActive && isDirty;
         
         return (
           <div
@@ -44,6 +45,9 @@ export const NoteTree: React.FC = () => {
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {note.name}
             </span>
+            {showDirty && (
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--accent)' }} />
+            )}
           </div>
         );
       })}

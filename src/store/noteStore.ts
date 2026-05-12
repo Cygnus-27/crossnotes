@@ -13,10 +13,12 @@ interface NoteState {
   openNotes: Note[]; // For tabs mode
   layoutMode: 'tabs' | 'history';
   selectedNoteIndex: number;
+  isDirty: boolean;
   setNotes: (notes: Note[]) => void;
   setActiveNote: (note: Note | null) => void;
   setSelectedNoteIndex: (index: number) => void;
   setLayoutMode: (mode: 'tabs' | 'history') => void;
+  setIsDirty: (dirty: boolean) => void;
   closeNote: (path: string) => void;
 }
 
@@ -26,7 +28,9 @@ export const useNoteStore = create<NoteState>((set) => ({
   openNotes: [],
   layoutMode: 'history',
   selectedNoteIndex: 0,
+  isDirty: false,
   setNotes: (notes) => set({ notes, selectedNoteIndex: 0 }),
+  setIsDirty: (isDirty) => set({ isDirty }),
   setActiveNote: (note) => set((state) => {
     if (!note) return { activeNote: null };
     
