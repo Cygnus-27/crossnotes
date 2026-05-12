@@ -1,7 +1,1 @@
-# Tauri + React + Typescript
-
-This template should help get you started developing with Tauri, React and Typescript in Vite.
-
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+crossnotes is a work-in-progress cross-platform, cloud sync, note-taking app, .md file formats with fast keyboard shortcuts, allows you to utilise the full space without taking your hands off of your keyboard.  
