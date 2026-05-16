@@ -1,6 +1,6 @@
 # CrossNotes
 
-crossnotes is a work-in-progress keyboard-first markdown note-taking application built for deep focus and high-performance workflows. Eliminating the friction between your thoughts and the screen, CrossNotes allows you to manage your entire vault without ever touching your mouse. 
+crossnotes is a work-in-progress keyboard-first cross-platform markdown note-taking application built for deep focus and high-performance workflows. Eliminating the friction between your thoughts and the screen, CrossNotes allows you to manage your entire vault without ever touching your mouse. 
 
 ---
 
