@@ -13,7 +13,8 @@ export const useVault = () => {
     if (!currentVaultPath) return;
     try {
       const fileName = name.endsWith('.md') ? name : `${name}.md`;
-      const path = `${currentVaultPath}/${fileName}`;
+      const basePath = currentVaultPath.replace(/\\/g, '/');
+      const path = `${basePath}/${fileName}`;
       await writeTextFile(path, '# ' + name); // Default content
       const newNote: Note = { path, name, content: '# ' + name };
       
@@ -28,7 +29,8 @@ export const useVault = () => {
   const renameNote = useCallback(async (note: Note, newName: string) => {
     try {
       const newFileName = newName.endsWith('.md') ? newName : `${newName}.md`;
-      const newPath = note.path.substring(0, note.path.lastIndexOf('/')) + '/' + newFileName;
+      const normalizedNotePath = note.path.replace(/\\/g, '/');
+      const newPath = normalizedNotePath.substring(0, normalizedNotePath.lastIndexOf('/')) + '/' + newFileName;
       await rename(note.path, newPath);
       
       const currentNotes = useNoteStore.getState().notes;
@@ -76,9 +78,10 @@ export const useVault = () => {
       const entries = await readDir(path);
       const fetchedNotes: Note[] = [];
 
+      const normalizedBase = path.replace(/\\/g, '/');
       for (const entry of entries) {
         if (entry.isFile && entry.name?.endsWith('.md')) {
-          const notePath = `${path}/${entry.name}`;
+          const notePath = `${normalizedBase}/${entry.name}`;
           fetchedNotes.push({
             path: notePath,
             name: entry.name.replace('.md', ''),
@@ -107,23 +110,39 @@ export const useVault = () => {
   }, [setNotes]);
 
   const openVault = useCallback(async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: 'Select Note Vault',
-    });
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Note Vault',
+      });
 
-    if (selected && typeof selected === 'string') {
-      setVaultPath(selected);
-      const loaded = await loadNotes(selected);
+      // open() can return string | string[] | null depending on platform
+      let vaultDir: string | null = null;
+      if (Array.isArray(selected)) {
+        vaultDir = selected[0] ?? null;
+      } else if (typeof selected === 'string') {
+        vaultDir = selected;
+      }
+
+      if (!vaultDir) return;
+
+      // Normalize path separators (Windows uses backslashes)
+      vaultDir = vaultDir.replace(/\\/g, '/');
+
+      setVaultPath(vaultDir);
+      const loaded = await loadNotes(vaultDir);
       if (loaded.length > 0) {
         const firstNote = loaded[0];
         const content = await readTextFile(firstNote.path);
         setActiveNote({ ...firstNote, content });
         useNoteStore.getState().setSelectedNoteIndex(0);
       }
+    } catch (err) {
+      console.error('Failed to open vault:', err);
     }
   }, [setVaultPath, loadNotes, setActiveNote]);
+
 
   const openNote = useCallback(async (note: Note) => {
     try {
