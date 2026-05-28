@@ -1,171 +1,215 @@
-import { open } from '@tauri-apps/plugin-dialog';
-import { readDir, readTextFile, writeTextFile, remove, rename } from '@tauri-apps/plugin-fs';
-import { useNoteStore, Note } from '../store/noteStore';
-import { useVaultStore } from '../store/vaultStore';
-import { useEffect, useCallback } from 'react';
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  readDir,
+  readTextFile,
+  writeTextFile,
+  remove,
+  rename,
+} from "@tauri-apps/plugin-fs";
+import { useNoteStore, Note } from "../store/noteStore";
+import { useVaultStore } from "../store/vaultStore";
+import { useEffect, useCallback } from "react";
 
 export const useVault = () => {
   const { vaultPath, setVaultPath } = useVaultStore();
-  const { setNotes, setActiveNote, activeNote, notes } = useNoteStore();
+  const { setNotes, setActiveNote, activeNote, notes, resetWorkspace } =
+    useNoteStore();
 
-  const createNote = useCallback(async (name: string) => {
-    const currentVaultPath = useVaultStore.getState().vaultPath;
-    if (!currentVaultPath) return;
-    try {
-      const fileName = name.endsWith('.md') ? name : `${name}.md`;
-      const basePath = currentVaultPath.replace(/\\/g, '/');
-      const path = `${basePath}/${fileName}`;
-      await writeTextFile(path, '# ' + name); // Default content
-      const newNote: Note = { path, name, content: '# ' + name };
-      
-      const currentNotes = useNoteStore.getState().notes;
-      setNotes([...currentNotes, newNote]);
-      setActiveNote(newNote);
-    } catch (err) {
-      console.error('Failed to create note:', err);
-    }
-  }, [setNotes, setActiveNote]);
+  const createNote = useCallback(
+    async (name: string) => {
+      const currentVaultPath = useVaultStore.getState().vaultPath;
+      if (!currentVaultPath) return;
 
-  const renameNote = useCallback(async (note: Note, newName: string) => {
-    try {
-      const newFileName = newName.endsWith('.md') ? newName : `${newName}.md`;
-      const normalizedNotePath = note.path.replace(/\\/g, '/');
-      const newPath = normalizedNotePath.substring(0, normalizedNotePath.lastIndexOf('/')) + '/' + newFileName;
-      await rename(note.path, newPath);
-      
-      const currentNotes = useNoteStore.getState().notes;
-      const updatedNotes = currentNotes.map(n => n.path === note.path 
-        ? { ...n, path: newPath, name: newName } 
-        : n);
-      setNotes(updatedNotes);
-      
-      const currentActive = useNoteStore.getState().activeNote;
-      if (currentActive?.path === note.path) {
-        setActiveNote({ ...currentActive, path: newPath, name: newName });
+      try {
+        const fileName = name.endsWith(".md") ? name : `${name}.md`;
+        const basePath = currentVaultPath.replace(/\\/g, "/");
+        const path = `${basePath}/${fileName}`;
+        await writeTextFile(path, "# " + name);
+        const newNote: Note = { path, name, content: "# " + name };
+
+        const currentNotes = useNoteStore.getState().notes;
+        setNotes([...currentNotes, newNote]);
+        setActiveNote(newNote);
+      } catch (err) {
+        console.error("Failed to create note:", err);
       }
-    } catch (err) {
-      console.error('Failed to rename note:', err);
-    }
-  }, [setNotes, setActiveNote]);
+    },
+    [setNotes, setActiveNote],
+  );
 
-  const deleteNote = useCallback(async (note: Note) => {
-    try {
-      await remove(note.path);
-      const currentNotes = useNoteStore.getState().notes;
-      const updatedNotes = currentNotes.filter(n => n.path !== note.path);
-      setNotes(updatedNotes);
-      useNoteStore.getState().closeNote(note.path);
-    } catch (err) {
-      console.error('Failed to delete note:', err);
-    }
-  }, [setNotes]);
+  const renameNote = useCallback(
+    async (note: Note, newName: string) => {
+      try {
+        const newFileName = newName.endsWith(".md") ? newName : `${newName}.md`;
+        const normalizedNotePath = note.path.replace(/\\/g, "/");
+        const newPath = `${normalizedNotePath.substring(0, normalizedNotePath.lastIndexOf("/"))}/${newFileName}`;
+        await rename(note.path, newPath);
+
+        const currentNotes = useNoteStore.getState().notes;
+        const updatedNotes = currentNotes.map((n) =>
+          n.path === note.path ? { ...n, path: newPath, name: newName } : n,
+        );
+        setNotes(updatedNotes);
+
+        const currentActive = useNoteStore.getState().activeNote;
+        if (currentActive?.path === note.path) {
+          setActiveNote({ ...currentActive, path: newPath, name: newName });
+        }
+      } catch (err) {
+        console.error("Failed to rename note:", err);
+      }
+    },
+    [setNotes, setActiveNote],
+  );
+
+  const deleteNote = useCallback(
+    async (note: Note) => {
+      try {
+        await remove(note.path);
+        const currentNotes = useNoteStore.getState().notes;
+        const updatedNotes = currentNotes.filter((n) => n.path !== note.path);
+        setNotes(updatedNotes);
+        useNoteStore.getState().closeNote(note.path);
+      } catch (err) {
+        console.error("Failed to delete note:", err);
+      }
+    },
+    [setNotes],
+  );
 
   const saveNote = useCallback(async (note: Note, content: string) => {
     if (!note.path) return;
+
     try {
       await writeTextFile(note.path, content);
       const currentNotes = useNoteStore.getState().notes;
-      const updatedNotes = currentNotes.map(n => n.path === note.path ? { ...n, content } : n);
+      const updatedNotes = currentNotes.map((n) =>
+        n.path === note.path ? { ...n, content } : n,
+      );
       useNoteStore.setState({ notes: updatedNotes, isDirty: false });
     } catch (err) {
-      console.error('Failed to save note:', err);
-      alert('Failed to save note. Please check permissions or folder path.\n' + err);
+      console.error("Failed to save note:", err);
+      alert(
+        "Failed to save note. Please check permissions or folder path.\n" + err,
+      );
     }
   }, []);
 
-  const loadNotes = useCallback(async (path: string): Promise<Note[]> => {
-    try {
-      const entries = await readDir(path);
-      const fetchedNotes: Note[] = [];
+  const loadNotes = useCallback(
+    async (path: string): Promise<Note[]> => {
+      try {
+        const entries = await readDir(path);
+        const fetchedNotes: Note[] = [];
+        const normalizedBase = path.replace(/\\/g, "/");
 
-      const normalizedBase = path.replace(/\\/g, '/');
-      for (const entry of entries) {
-        if (entry.isFile && entry.name?.endsWith('.md')) {
-          const notePath = `${normalizedBase}/${entry.name}`;
-          fetchedNotes.push({
-            path: notePath,
-            name: entry.name.replace('.md', ''),
-            content: '', // Placeholder
-          });
-        }
-      }
-
-      const notesWithContent = await Promise.all(
-        fetchedNotes.map(async (note) => {
-          try {
-            const content = await readTextFile(note.path);
-            return { ...note, content };
-          } catch (e) {
-            return note;
+        for (const entry of entries) {
+          if (entry.isFile && entry.name?.endsWith(".md")) {
+            fetchedNotes.push({
+              path: `${normalizedBase}/${entry.name}`,
+              name: entry.name.replace(".md", ""),
+              content: "",
+            });
           }
-        })
-      );
+        }
 
-      setNotes(notesWithContent);
-      return notesWithContent;
-    } catch (err) {
-      console.error('Failed to load notes:', err);
-      return [];
-    }
-  }, [setNotes]);
+        const notesWithContent = await Promise.all(
+          fetchedNotes.map(async (note) => {
+            try {
+              const content = await readTextFile(note.path);
+              return { ...note, content };
+            } catch {
+              return note;
+            }
+          }),
+        );
+
+        notesWithContent.sort((a, b) => a.name.localeCompare(b.name));
+        setNotes(notesWithContent);
+        return notesWithContent;
+      } catch (err) {
+        console.error("Failed to load notes:", err);
+        resetWorkspace();
+        return [];
+      }
+    },
+    [setNotes, resetWorkspace],
+  );
 
   const openVault = useCallback(async () => {
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: 'Select Note Vault',
+        title: "Select Note Vault",
       });
 
-      // open() can return string | string[] | null depending on platform
       let vaultDir: string | null = null;
       if (Array.isArray(selected)) {
         vaultDir = selected[0] ?? null;
-      } else if (typeof selected === 'string') {
+      } else if (typeof selected === "string") {
         vaultDir = selected;
       }
 
       if (!vaultDir) return;
 
-      // Normalize path separators (Windows uses backslashes)
-      vaultDir = vaultDir.replace(/\\/g, '/');
-
+      vaultDir = vaultDir.replace(/\\/g, "/");
       setVaultPath(vaultDir);
+
       const loaded = await loadNotes(vaultDir);
       if (loaded.length > 0) {
         const firstNote = loaded[0];
-        const content = await readTextFile(firstNote.path);
-        setActiveNote({ ...firstNote, content });
+        setActiveNote(firstNote);
         useNoteStore.getState().setSelectedNoteIndex(0);
+      } else {
+        setActiveNote(null);
       }
     } catch (err) {
-      console.error('Failed to open vault:', err);
+      console.error("Failed to open vault:", err);
     }
   }, [setVaultPath, loadNotes, setActiveNote]);
 
-
-  const openNote = useCallback(async (note: Note) => {
-    try {
-      const content = await readTextFile(note.path);
-      setActiveNote({ ...note, content });
-    } catch (err) {
-      console.error('Failed to open note:', err);
-    }
-  }, [setActiveNote]);
+  const openNote = useCallback(
+    async (note: Note) => {
+      try {
+        const content = await readTextFile(note.path);
+        setActiveNote({ ...note, content });
+      } catch (err) {
+        console.error("Failed to open note:", err);
+      }
+    },
+    [setActiveNote],
+  );
 
   useEffect(() => {
-    if (vaultPath && notes.length === 0) {
-      loadNotes(vaultPath).then(loaded => {
-        if (loaded.length > 0 && !activeNote) {
-          const firstNote = loaded[0];
-          readTextFile(firstNote.path).then(content => {
-             setActiveNote({ ...firstNote, content });
-             useNoteStore.getState().setSelectedNoteIndex(0);
-          });
+    if (!vaultPath) {
+      resetWorkspace();
+      return;
+    }
+
+    if (notes.length === 0 && !activeNote) {
+      loadNotes(vaultPath).then((loaded) => {
+        if (loaded.length > 0) {
+          setActiveNote(loaded[0]);
+          useNoteStore.getState().setSelectedNoteIndex(0);
         }
       });
     }
-  }, [vaultPath, notes.length, setActiveNote, activeNote, loadNotes]);
+  }, [
+    vaultPath,
+    notes.length,
+    activeNote,
+    loadNotes,
+    setActiveNote,
+    resetWorkspace,
+  ]);
 
-  return { vaultPath, openVault, openNote, saveNote, deleteNote, createNote, renameNote };
+  return {
+    vaultPath,
+    openVault,
+    openNote,
+    saveNote,
+    deleteNote,
+    createNote,
+    renameNote,
+  };
 };

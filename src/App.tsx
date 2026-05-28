@@ -16,6 +16,7 @@ import { useUIStore } from "./store/uiStore";
 function App() {
   const { openVault, vaultPath } = useVault();
   const activeNote = useNoteStore((state) => state.activeNote);
+  const notes = useNoteStore((state) => state.notes);
   const {
     quickOpenOpen,
     setQuickOpenOpen,
@@ -28,6 +29,10 @@ function App() {
   useCommands();
   useShortcuts({ onOpenVault: openVault });
 
+  const showLanding = !activeNote;
+  const hasVault = Boolean(vaultPath);
+  const hasNotes = notes.length > 0;
+
   return (
     <AppShell>
       <CommandPalette />
@@ -39,40 +44,33 @@ function App() {
       />
       <Header />
       <TabBar />
-      {activeNote ? (
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
+      {!showLanding ? (
+        <div className="editor-stage">
           <Editor />
         </div>
       ) : (
         <div className="empty-state">
-          <div className="empty-card">
-            <span className="empty-badge">Local-first workspace</span>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            >
-              <h1 className="empty-title">Write faster, sync smarter.</h1>
-              <p className="empty-subtitle">
-                CrossNotes keeps your markdown notes local, keyboard-first, and
-                ready for future LAN sync between desktop and mobile.
-              </p>
-            </div>
+          <section className="empty-page">
+            <div className="empty-kicker">CrossNotes</div>
+            <h1 className="empty-title">
+              {hasVault && !hasNotes
+                ? "A quiet vault, waiting for its first note."
+                : "A quiet workspace for markdown notes."}
+            </h1>
+            <p className="empty-subtitle">
+              {hasVault && !hasNotes
+                ? "This folder is connected, but it does not contain any .md files yet. Add a markdown file here or switch to a vault that already has notes."
+                : "Open a folder of markdown files and keep your writing local. The sync layer is being designed around deliberate device-to-device transfer, not a cloud account."}
+            </p>
+
             <div className="empty-actions">
-              {!vaultPath && (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={openVault}
-                >
-                  Open Vault
-                </button>
-              )}
+              <button
+                type="button"
+                className="primary-button"
+                onClick={openVault}
+              >
+                {hasVault ? "Choose another vault" : "Open vault"}
+              </button>
               <button
                 type="button"
                 className="secondary-button"
@@ -81,23 +79,49 @@ function App() {
                 View shortcuts
               </button>
             </div>
+
+            <div className="empty-grid">
+              <article className="empty-panel">
+                <span className="panel-index">01</span>
+                <h2>Local first</h2>
+                <p>
+                  Your vault is just a folder. Notes stay readable as plain
+                  markdown files.
+                </p>
+              </article>
+              <article className="empty-panel">
+                <span className="panel-index">02</span>
+                <h2>Keyboard ready</h2>
+                <p>
+                  Use quick open, global search, command palette, and Vim
+                  editing without leaving the flow.
+                </p>
+              </article>
+              <article className="empty-panel">
+                <span className="panel-index">03</span>
+                <h2>Sync direction</h2>
+                <p>
+                  Next up: pair nearby devices and exchange changes directly
+                  over your local network.
+                </p>
+              </article>
+            </div>
+
             <div className="empty-shortcuts">
-              {!vaultPath && (
-                <div className="empty-shortcut">
-                  <span className="keyboard-hint">Ctrl + O</span>
-                  <span>Open a vault</span>
-                </div>
-              )}
+              <div className="empty-shortcut">
+                <span className="keyboard-hint">Ctrl + O</span>
+                <span>{hasVault ? "Switch vault" : "Open a vault"}</span>
+              </div>
+              <div className="empty-shortcut">
+                <span className="keyboard-hint">Ctrl + P</span>
+                <span>Quick open</span>
+              </div>
               <div className="empty-shortcut">
                 <span className="keyboard-hint">Ctrl + K</span>
-                <span>Run commands</span>
-              </div>
-              <div className="empty-shortcut">
-                <span className="keyboard-hint">Ctrl + ?</span>
-                <span>Open help</span>
+                <span>Commands</span>
               </div>
             </div>
-          </div>
+          </section>
         </div>
       )}
     </AppShell>

@@ -1,58 +1,71 @@
-import React from 'react';
-import { useNoteStore } from '../../store/noteStore';
-import { useUIStore } from '../../store/uiStore';
+import React from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useNoteStore } from "../../store/noteStore";
+import { useUIStore } from "../../store/uiStore";
+import { useVaultStore } from "../../store/vaultStore";
+
+const shortVaultPath = (vaultPath: string | null) => {
+  if (!vaultPath) return "No vault selected";
+  const parts = vaultPath.split(/[\\/]/).filter(Boolean);
+  return parts.slice(-2).join(" / ") || vaultPath;
+};
 
 export const Header: React.FC = () => {
   const { activeNote, isDirty } = useNoteStore();
-  const { setHelpOpen } = useUIStore();
+  const { setHelpOpen, toggleTheme, theme } = useUIStore();
+  const vaultPath = useVaultStore((state) => state.vaultPath);
+
+  const openVaultFolder = async () => {
+    if (!vaultPath) return;
+
+    try {
+      await invoke("open_in_file_manager", { path: vaultPath });
+    } catch (err) {
+      console.error("Failed to open vault folder:", err);
+    }
+  };
 
   return (
-    <header style={{
-      height: '48px',
-      borderBottom: '1px solid var(--border)',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0 24px',
-      backgroundColor: 'var(--bg-base)',
-      justifyContent: 'space-between',
-      flexShrink: 0
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-        {activeNote ? activeNote.name : 'CrossNotes'}
-        {isDirty && (
-          <span 
-            title="Unsaved changes"
-            style={{ 
-              width: '8px', 
-              height: '8px', 
-              borderRadius: '50%', 
-              backgroundColor: 'var(--accent)', 
-              display: 'inline-block' 
-            }} 
-          />
-        )}
+    <header className="app-header">
+      <div className="header-main">
+        <div className="brand-block">
+          <div className="brand-title">
+            {activeNote ? activeNote.name : "CrossNotes"}
+            {isDirty && <span className="dirty-dot" title="Unsaved changes" />}
+          </div>
+          {activeNote ? (
+            <button
+              type="button"
+              className="brand-path-button"
+              onClick={openVaultFolder}
+              disabled={!vaultPath}
+              title={vaultPath ? `Open ${vaultPath}` : "No vault selected"}
+            >
+              {shortVaultPath(vaultPath)}
+            </button>
+          ) : (
+            <div className="brand-subtitle">Local markdown workspace</div>
+          )}
+        </div>
       </div>
-      
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+      <div className="header-toolbar">
         <button
-          onClick={() => setHelpOpen(true)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-faint)',
-            cursor: 'pointer',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 8px',
-            borderRadius: '4px',
-          }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+          type="button"
+          className="header-action-button header-icon-button"
+          onClick={toggleTheme}
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
         >
-          <span style={{ fontSize: '16px' }}>?</span> Help
-          <span className="keyboard-hint" style={{ opacity: 0.8 }}>Ctrl + ?</span>
+          {theme === "dark" ? "☼" : "☾"}
+        </button>
+        <button
+          type="button"
+          className="header-action-button"
+          onClick={() => setHelpOpen(true)}
+          title="Open keyboard shortcuts"
+        >
+          ? <span className="keyboard-hint">Ctrl + ?</span>
         </button>
       </div>
     </header>
