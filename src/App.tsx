@@ -14,7 +14,7 @@ import { ShortcutCheatSheet } from "./components/ui/ShortcutCheatSheet";
 import { useUIStore } from "./store/uiStore";
 
 function App() {
-  const { openVault, vaultPath } = useVault();
+  const { openVault, vaultPath, createNote } = useVault();
   const activeNote = useNoteStore((state) => state.activeNote);
   const notes = useNoteStore((state) => state.notes);
   const {
@@ -32,6 +32,11 @@ function App() {
   const showLanding = !activeNote;
   const hasVault = Boolean(vaultPath);
   const hasNotes = notes.length > 0;
+
+  const promptForNewNote = () => {
+    const name = prompt("Note name:");
+    if (name?.trim()) createNote(name.trim());
+  };
 
   return (
     <AppShell>
@@ -67,10 +72,23 @@ function App() {
               <button
                 type="button"
                 className="primary-button"
-                onClick={openVault}
+                onClick={hasVault && !hasNotes ? promptForNewNote : openVault}
               >
-                {hasVault ? "Choose another vault" : "Open vault"}
+                {hasVault && !hasNotes
+                  ? "Create first note"
+                  : hasVault
+                    ? "Choose another vault"
+                    : "Open vault"}
               </button>
+              {hasVault && !hasNotes && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={openVault}
+                >
+                  Choose another vault
+                </button>
+              )}
               <button
                 type="button"
                 className="secondary-button"
