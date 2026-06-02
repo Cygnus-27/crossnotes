@@ -6,6 +6,7 @@ import {
   noteMarkerOptions,
   useNoteVisualStore,
 } from "../../store/noteVisualStore";
+import { useSync } from "../../hooks/useSync";
 
 export const NoteTree: React.FC = () => {
   const {
@@ -18,6 +19,7 @@ export const NoteTree: React.FC = () => {
   const { openNote } = useVault();
   const { focusedElement } = useUIStore();
   const { getMarker, setMarker } = useNoteVisualStore();
+  const { isNoteSelected, setNoteSyncEnabled } = useSync();
   const [openMarkerFor, setOpenMarkerFor] = useState<string | null>(null);
 
   return (
@@ -28,6 +30,7 @@ export const NoteTree: React.FC = () => {
           index === selectedNoteIndex && focusedElement === "sidebar";
         const showDirty = isActive && isDirty;
         const marker = getMarker(note.path);
+        const syncSelected = isNoteSelected(note.path);
         const className = [
           "note-item",
           isActive ? "is-active" : "",
@@ -86,6 +89,26 @@ export const NoteTree: React.FC = () => {
             </div>
             <span className="note-item-name">{note.name}</span>
             {showDirty && <span className="note-item-dirty" />}
+            <button
+              type="button"
+              className={`note-sync-button ${syncSelected ? "is-selected" : ""}`}
+              title={
+                syncSelected
+                  ? "Remove this note from sync selection"
+                  : "Select this note for sync"
+              }
+              aria-label={
+                syncSelected
+                  ? `Remove ${note.name} from sync selection`
+                  : `Select ${note.name} for sync`
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                setNoteSyncEnabled(note.path, !syncSelected);
+              }}
+            >
+              {syncSelected ? "↻" : "○"}
+            </button>
           </div>
         );
       })}

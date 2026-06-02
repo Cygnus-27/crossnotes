@@ -36,7 +36,7 @@ export const Header: React.FC = () => {
           {activeNote ? (
             <button
               type="button"
-              className="brand-path-button"
+              className="brand-path-button desktop-only"
               onClick={openVaultFolder}
               disabled={!vaultPath}
               title={vaultPath ? `Open ${vaultPath}` : "No vault selected"}

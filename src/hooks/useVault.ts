@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   readDir,
@@ -135,6 +136,64 @@ export const useVault = () => {
     [setNotes, resetWorkspace],
   );
 
+  const useDefaultVault = useCallback(async () => {
+    try {
+      const defaultVaultPath = await invoke<string>("get_default_vault");
+      const normalizedVaultPath = defaultVaultPath.replace(/\\/g, "/");
+      setVaultPath(normalizedVaultPath);
+      const loaded = await loadNotes(normalizedVaultPath);
+      if (loaded.length > 0) {
+        setActiveNote(loaded[0]);
+        useNoteStore.getState().setSelectedNoteIndex(0);
+      } else {
+        setActiveNote(null);
+      }
+    } catch (err) {
+      console.error("Failed to open default vault:", err);
+      alert("Failed to open app vault.\n" + err);
+    }
+  }, [loadNotes, setActiveNote, setVaultPath]);
+
+  const createVault = useCallback(async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Choose where to create the new vault",
+      });
+
+      let parentDir: string | null = null;
+      if (Array.isArray(selected)) {
+        parentDir = selected[0] ?? null;
+      } else if (typeof selected === "string") {
+        parentDir = selected;
+      }
+
+      if (!parentDir) return;
+
+      const vaultName = window.prompt(
+        "Name your new vault",
+        "CrossNotes Vault",
+      );
+      const trimmedName = vaultName?.trim();
+      if (!trimmedName) return;
+
+      const newVaultPath = await invoke<string>("create_vault", {
+        parentPath: parentDir.replace(/\\/g, "/"),
+        vaultName: trimmedName,
+      });
+
+      const normalizedVaultPath = newVaultPath.replace(/\\/g, "/");
+      setVaultPath(normalizedVaultPath);
+      setNotes([]);
+      setActiveNote(null);
+      useNoteStore.getState().setSelectedNoteIndex(0);
+    } catch (err) {
+      console.error("Failed to create vault:", err);
+      alert("Failed to create vault.\n" + err);
+    }
+  }, [setActiveNote, setNotes, setVaultPath]);
+
   const openVault = useCallback(async () => {
     try {
       const selected = await open({
@@ -206,6 +265,9 @@ export const useVault = () => {
   return {
     vaultPath,
     openVault,
+    createVault,
+    useDefaultVault,
+    loadNotes,
     openNote,
     saveNote,
     deleteNote,

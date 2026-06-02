@@ -8,13 +8,15 @@ import { CommandPalette } from "./components/palette/CommandPalette";
 import { QuickOpen } from "./components/palette/QuickOpen";
 import { GlobalSearch } from "./components/palette/GlobalSearch";
 import { useCommands } from "./hooks/useCommands";
+import { useSyncListeners } from "./hooks/useSyncListeners";
 import { TabBar } from "./components/layout/TabBar";
 import { Header } from "./components/layout/Header";
 import { ShortcutCheatSheet } from "./components/ui/ShortcutCheatSheet";
+import { SyncStage } from "./components/sync/SyncStage";
 import { useUIStore } from "./store/uiStore";
 
 function App() {
-  const { openVault, vaultPath, createNote } = useVault();
+  const { openVault, useDefaultVault, vaultPath, createNote } = useVault();
   const activeNote = useNoteStore((state) => state.activeNote);
   const notes = useNoteStore((state) => state.notes);
   const {
@@ -27,6 +29,7 @@ function App() {
   } = useUIStore();
 
   useCommands();
+  useSyncListeners();
   useShortcuts({ onOpenVault: openVault });
 
   const showLanding = !activeNote;
@@ -47,6 +50,7 @@ function App() {
         isOpen={helpOpen}
         onClose={() => setHelpOpen(false)}
       />
+      <SyncStage />
       <Header />
       <TabBar />
       {!showLanding ? (
@@ -72,23 +76,32 @@ function App() {
               <button
                 type="button"
                 className="primary-button"
-                onClick={hasVault && !hasNotes ? promptForNewNote : openVault}
+                onClick={
+                  hasVault && !hasNotes ? promptForNewNote : useDefaultVault
+                }
               >
                 {hasVault && !hasNotes
                   ? "Create first note"
                   : hasVault
-                    ? "Choose another vault"
-                    : "Open vault"}
+                    ? "Use app vault"
+                    : "Use app vault"}
               </button>
               {hasVault && !hasNotes && (
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button desktop-only"
                   onClick={openVault}
                 >
                   Choose another vault
                 </button>
               )}
+              <button
+                type="button"
+                className="secondary-button desktop-only"
+                onClick={openVault}
+              >
+                Open folder vault
+              </button>
               <button
                 type="button"
                 className="secondary-button"

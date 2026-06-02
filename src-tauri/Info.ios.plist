@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required since iOS 14 to access the local network at all. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CrossNotes uses the local network to discover and sync your notes with your other devices on the same Wi-Fi.</string>
+	<!-- Bonjour service types the app advertises and browses for. Must match
+	     the mDNS service registered in Rust (_crossnotes._tcp). -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_crossnotes._tcp</string>
+	</array>
+</dict>
+</plist>
