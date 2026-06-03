@@ -2,6 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect } from "react";
 import {
+  BridgeCandidate,
+  BridgeConfig,
+  BridgePullResult,
+  BridgePushResult,
+  BridgeStatus,
   DeviceIdentity,
   LanSendResult,
   notePathToVaultRelativePath,
@@ -29,6 +34,8 @@ export const useSync = () => {
   const syncStatus = useSyncStore((state) => state.syncStatus);
   const lastLanSendResult = useSyncStore((state) => state.lastLanSendResult);
   const peers = useSyncStore((state) => state.peers);
+  const bridge = useSyncStore((state) => state.bridge);
+  const bridgeStatus = useSyncStore((state) => state.bridgeStatus);
   const lastTriggeredAt = useSyncStore((state) => state.lastTriggeredAt);
   const lastExportPath = useSyncStore((state) => state.lastExportPath);
 
@@ -206,9 +213,97 @@ export const useSync = () => {
     }
   }, [loadSyncManifest, vaultPath]);
 
+  const loadBridge = useCallback(async () => {
+    try {
+      const [config, status] = await Promise.all([
+        invoke<BridgeConfig | null>("get_bridge"),
+        invoke<BridgeStatus>("bridge_status"),
+      ]);
+      useSyncStore.getState().setBridge(config ?? null);
+      useSyncStore.getState().setBridgeStatus(status);
+    } catch (err) {
+      useSyncStore.getState().setError(errorMessage(err));
+    }
+  }, []);
+
+  const detectBridges = useCallback(
+    () => invoke<BridgeCandidate[]>("detect_bridge_candidates").catch(() => []),
+    [],
+  );
+
+  const selectBridge = useCallback(
+    async (path: string) => {
+      try {
+        const config = await invoke<BridgeConfig>("set_bridge", { path });
+        useSyncStore.getState().setBridge(config);
+        await loadBridge();
+        return config;
+      } catch (err) {
+        useSyncStore.getState().setError(errorMessage(err));
+        return null;
+      }
+    },
+    [loadBridge],
+  );
+
+  const clearBridge = useCallback(async () => {
+    try {
+      await invoke("clear_bridge");
+      useSyncStore.getState().setBridge(null);
+      useSyncStore.getState().setBridgeStatus(null);
+    } catch (err) {
+      useSyncStore.getState().setError(errorMessage(err));
+    }
+  }, []);
+
+  const setBridgeWholeVault = useCallback(async (wholeVault: boolean) => {
+    try {
+      const config = await invoke<BridgeConfig>("set_bridge_options", {
+        wholeVault,
+      });
+      useSyncStore.getState().setBridge(config);
+    } catch (err) {
+      useSyncStore.getState().setError(errorMessage(err));
+    }
+  }, []);
+
+  const pushToBridge = useCallback(async () => {
+    if (!vaultPath) return null;
+    useSyncStore.getState().setError(null);
+    try {
+      const result = await invoke<BridgePushResult>("push_to_bridge", {
+        vaultPath,
+      });
+      await loadBridge();
+      return result;
+    } catch (err) {
+      useSyncStore.getState().setError(errorMessage(err));
+      return null;
+    }
+  }, [loadBridge, vaultPath]);
+
+  const pullFromBridge = useCallback(async () => {
+    if (!vaultPath) return null;
+    useSyncStore.getState().setError(null);
+    try {
+      const result = await invoke<BridgePullResult>("pull_from_bridge", {
+        vaultPath,
+      });
+      await loadBridge();
+      return result;
+    } catch (err) {
+      useSyncStore.getState().setError(errorMessage(err));
+      return null;
+    }
+  }, [loadBridge, vaultPath]);
+
   useEffect(() => {
     loadSyncManifest();
   }, [loadSyncManifest]);
+
+  useEffect(() => {
+    loadBridge();
+  }, [loadBridge]);
 
   return {
     selectedNotes,
@@ -223,6 +318,8 @@ export const useSync = () => {
     syncStatus,
     lastLanSendResult,
     peers,
+    bridge,
+    bridgeStatus,
     lastTriggeredAt,
     lastExportPath,
     loadSyncManifest,
@@ -235,5 +332,12 @@ export const useSync = () => {
     cancelPairing,
     pairWithCode,
     sendLatestSyncPackage,
+    loadBridge,
+    detectBridges,
+    selectBridge,
+    clearBridge,
+    setBridgeWholeVault,
+    pushToBridge,
+    pullFromBridge,
   };
 };

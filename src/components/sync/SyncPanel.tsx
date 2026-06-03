@@ -3,6 +3,7 @@ import { useSync } from "../../hooks/useSync";
 import { useVault } from "../../hooks/useVault";
 import { useVaultStore } from "../../store/vaultStore";
 import { useUIStore } from "../../store/uiStore";
+import { CrossOsVaultSection } from "./CrossOsVaultSection";
 
 export const SyncPanel: React.FC = () => {
   const vaultPath = useVaultStore((state) => state.vaultPath);
@@ -122,6 +123,8 @@ export const SyncPanel: React.FC = () => {
               </button>
             </div>
           </div>
+
+          <CrossOsVaultSection />
 
           <div className="sync-panel-status">
             {deviceIdentity && (

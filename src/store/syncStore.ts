@@ -46,6 +46,42 @@ export interface SyncPeer {
   paired: boolean;
 }
 
+export interface BridgeConfig {
+  path: string;
+  label: string;
+  createdAt: number;
+  wholeVault: boolean;
+  lastImportedAt: Record<string, number>;
+}
+
+export interface BridgeCandidate {
+  path: string;
+  label: string;
+  hasExistingBridge: boolean;
+}
+
+export interface BridgeStatus {
+  configured: boolean;
+  path: string | null;
+  writable: boolean;
+  peerCount: number;
+  message: string;
+}
+
+export interface BridgePushResult {
+  deviceId: string;
+  exportedCount: number;
+  path: string;
+}
+
+export interface BridgePullResult {
+  importedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  conflicts: string[];
+  fromDevices: string[];
+}
+
 interface SyncState extends SyncManifest {
   isLoading: boolean;
   isSyncing: boolean;
@@ -57,7 +93,11 @@ interface SyncState extends SyncManifest {
   syncStatus: SyncStartResult | null;
   lastLanSendResult: LanSendResult | null;
   peers: SyncPeer[];
+  bridge: BridgeConfig | null;
+  bridgeStatus: BridgeStatus | null;
   setPeers: (peers: SyncPeer[]) => void;
+  setBridge: (bridge: BridgeConfig | null) => void;
+  setBridgeStatus: (bridgeStatus: BridgeStatus | null) => void;
   setManifest: (manifest: SyncManifest) => void;
   setLoading: (isLoading: boolean) => void;
   setSyncing: (isSyncing: boolean) => void;
@@ -102,7 +142,11 @@ export const useSyncStore = create<SyncState>((set) => ({
   syncStatus: null,
   lastLanSendResult: null,
   peers: [],
+  bridge: null,
+  bridgeStatus: null,
   setPeers: (peers) => set({ peers }),
+  setBridge: (bridge) => set({ bridge }),
+  setBridgeStatus: (bridgeStatus) => set({ bridgeStatus }),
   setManifest: (manifest) => set({ ...manifest, error: null }),
   setLoading: (isLoading) => set({ isLoading }),
   setSyncing: (isSyncing) => set({ isSyncing }),

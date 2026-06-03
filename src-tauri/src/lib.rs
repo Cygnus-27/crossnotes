@@ -2,7 +2,7 @@
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
@@ -118,6 +118,54 @@ struct SyncStartResult {
 struct PairRequest {
     code: String,
     device: DeviceIdentity,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct BridgeConfig {
+    path: String,
+    label: String,
+    created_at: u64,
+    whole_vault: bool,
+    /// device_id -> last imported package `created_at`.
+    #[serde(default)]
+    last_imported_at: HashMap<String, u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeCandidate {
+    path: String,
+    label: String,
+    has_existing_bridge: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeStatus {
+    configured: bool,
+    path: Option<String>,
+    writable: bool,
+    peer_count: usize,
+    message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgePushResult {
+    device_id: String,
+    exported_count: usize,
+    path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgePullResult {
+    imported_count: usize,
+    skipped_count: usize,
+    conflict_count: usize,
+    conflicts: Vec<String>,
+    from_devices: Vec<String>,
 }
 
 /// Process-wide sync runtime shared between Tauri commands and the
@@ -290,49 +338,8 @@ fn trigger_sync(vault_path: String) -> Result<SyncTriggerResult, String> {
 
     fs::create_dir_all(&sync_dir).map_err(|err| format!("failed to create sync package: {err}"))?;
 
-    let mut exported_count = 0;
-    let mut package_files = Vec::new();
-    let mut staged: HashSet<String> = HashSet::new();
-    for relative_path in &manifest.selected_notes {
-        validate_relative_sync_path(relative_path)?;
-        let source = vault.join(relative_path);
-        if !source.is_file() {
-            continue;
-        }
-
-        if stage_sync_file(&vault, &sync_dir, relative_path, &mut package_files, &mut staged)? {
-            exported_count += 1;
-        }
-
-        // Pull in any attachments the note links to so the references survive.
-        if let Ok(content) = fs::read_to_string(&source) {
-            for attachment in collect_attachment_paths(&content) {
-                if validate_relative_sync_path(&attachment).is_err() {
-                    continue;
-                }
-                if vault.join(&attachment).is_file() {
-                    stage_sync_file(
-                        &vault,
-                        &sync_dir,
-                        &attachment,
-                        &mut package_files,
-                        &mut staged,
-                    )?;
-                }
-            }
-        }
-    }
-
-    let package_manifest = SyncPackageManifest {
-        package_version: 1,
-        source_device: device,
-        created_at,
-        files: package_files,
-    };
-    write_json_file(
-        &sync_dir.join("crossnotes-sync-package.json"),
-        &package_manifest,
-    )?;
+    let exported_count =
+        build_package_into(&vault, &sync_dir, &manifest.selected_notes, &device, created_at)?;
 
     manifest.last_triggered_at = Some(created_at);
     manifest.last_export_path = Some(path_to_string(&sync_dir));
@@ -346,6 +353,78 @@ fn trigger_sync(vault_path: String) -> Result<SyncTriggerResult, String> {
     })
 }
 
+/// Stage the given vault-relative notes (plus any attachments they link to)
+/// into `sync_dir` and write the package manifest. Returns the number of notes
+/// exported. Shared by `trigger_sync` and the cross-OS bridge.
+fn build_package_into(
+    vault: &Path,
+    sync_dir: &Path,
+    note_paths: &[String],
+    device: &DeviceIdentity,
+    created_at: u64,
+) -> Result<usize, String> {
+    let mut exported_count = 0;
+    let mut package_files = Vec::new();
+    let mut staged: HashSet<String> = HashSet::new();
+
+    for relative_path in note_paths {
+        validate_relative_sync_path(relative_path)?;
+        let source = vault.join(relative_path);
+        if !source.is_file() {
+            continue;
+        }
+
+        if stage_sync_file(vault, sync_dir, relative_path, &mut package_files, &mut staged)? {
+            exported_count += 1;
+        }
+
+        // Pull in any attachments the note links to so the references survive.
+        if let Ok(content) = fs::read_to_string(&source) {
+            for attachment in collect_attachment_paths(&content) {
+                if validate_relative_sync_path(&attachment).is_err() {
+                    continue;
+                }
+                if vault.join(&attachment).is_file() {
+                    stage_sync_file(
+                        vault,
+                        sync_dir,
+                        &attachment,
+                        &mut package_files,
+                        &mut staged,
+                    )?;
+                }
+            }
+        }
+    }
+
+    let package_manifest = SyncPackageManifest {
+        package_version: 1,
+        source_device: device.clone(),
+        created_at,
+        files: package_files,
+    };
+    write_json_file(&sync_dir.join("crossnotes-sync-package.json"), &package_manifest)?;
+    Ok(exported_count)
+}
+
+/// Top-level markdown notes in a vault (matches how the app loads notes).
+fn collect_vault_notes(vault: &Path) -> Result<Vec<String>, String> {
+    let entries =
+        fs::read_dir(vault).map_err(|err| format!("failed to read vault: {err}"))?;
+    let mut notes = Vec::new();
+    for entry in entries.flatten() {
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.ends_with(".md") {
+                    notes.push(name.to_string());
+                }
+            }
+        }
+    }
+    notes.sort();
+    Ok(notes)
+}
+
 #[tauri::command]
 fn import_sync_package(
     vault_path: String,
@@ -356,7 +435,17 @@ fn import_sync_package(
     if !package.is_dir() {
         return Err(format!("sync package is not a folder: {package_path}"));
     }
+    let local_device = read_device_identity(&vault)?;
+    import_package_from_dir(&vault, &package, &local_device.device_id)
+}
 
+/// Import one package directory into the vault. Shared by `import_sync_package`
+/// and the cross-OS bridge.
+fn import_package_from_dir(
+    vault: &Path,
+    package: &Path,
+    local_device_id: &str,
+) -> Result<SyncImportResult, String> {
     let manifest_path = package.join("crossnotes-sync-package.json");
     if !manifest_path.is_file() {
         return Err("selected folder is missing crossnotes-sync-package.json".to_string());
@@ -370,8 +459,7 @@ fn import_sync_package(
         ));
     }
 
-    let local_device = read_device_identity(&vault)?;
-    if package_manifest.source_device.device_id == local_device.device_id {
+    if package_manifest.source_device.device_id == local_device_id {
         return Err("this package was created by this vault/device".to_string());
     }
 
@@ -875,6 +963,345 @@ fn is_trusted(app: &AppHandle, device_id: &str) -> bool {
         .any(|d| d.device_id == device_id)
 }
 
+// ── Cross-OS bridge (Option B: snapshot courier on shared storage) ──────────
+
+const BRIDGE_DIR: &str = ".crossnotes-bridge";
+
+fn bridge_config_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    fs::create_dir_all(&dir)
+        .map_err(|err| format!("failed to create app data directory: {err}"))?;
+    Ok(dir.join("bridge.json"))
+}
+
+fn read_bridge_config(app: &AppHandle) -> Option<BridgeConfig> {
+    let path = bridge_config_path(app).ok()?;
+    if !path.exists() {
+        return None;
+    }
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|contents| serde_json::from_str(&contents).ok())
+}
+
+fn write_bridge_config(app: &AppHandle, config: &BridgeConfig) -> Result<(), String> {
+    write_json_file(&bridge_config_path(app)?, config)
+}
+
+/// Confirms the location can actually be written to *right now*. Catches a
+/// read-only mount or an NTFS volume left dirty by Windows Fast Startup.
+fn probe_writable(dir: &Path) -> Result<(), String> {
+    let probe = dir.join(format!(".crossnotes-probe-{}", std::process::id()));
+    fs::write(&probe, b"crossnotes").map_err(|_| {
+        "the cross-OS location is not writable. If it is a Windows partition, \
+         disable Windows Fast Startup/hibernation and remount it read-write."
+            .to_string()
+    })?;
+    let _ = fs::remove_file(&probe);
+    Ok(())
+}
+
+fn count_bridge_snapshots(container: &Path) -> usize {
+    fs::read_dir(container)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| {
+                    entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                        && entry
+                            .file_name()
+                            .to_str()
+                            .map(|name| !name.ends_with(".staging"))
+                            .unwrap_or(false)
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+#[cfg(unix)]
+fn collect_mount_children(dir: &Path, out: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                out.push(entry.path());
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn detect_bridge_candidates() -> Vec<BridgeCandidate> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        collect_mount_children(Path::new("/Volumes"), &mut roots);
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Ok(user) = std::env::var("USER") {
+            collect_mount_children(&Path::new("/run/media").join(&user), &mut roots);
+            collect_mount_children(&Path::new("/media").join(&user), &mut roots);
+        }
+        collect_mount_children(Path::new("/mnt"), &mut roots);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        for letter in b'D'..=b'Z' {
+            let drive = PathBuf::from(format!("{}:\\", letter as char));
+            if drive.is_dir() {
+                roots.push(drive);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for root in roots {
+        let path = path_to_string(&root);
+        if !seen.insert(path.clone()) || !root.is_dir() {
+            continue;
+        }
+        let label = root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(&path)
+            .to_string();
+        out.push(BridgeCandidate {
+            has_existing_bridge: root.join(BRIDGE_DIR).is_dir(),
+            label,
+            path,
+        });
+    }
+    out
+}
+
+#[tauri::command]
+fn set_bridge(app: AppHandle, path: String) -> Result<BridgeConfig, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("not a folder: {path}"));
+    }
+    probe_writable(&root)?;
+
+    let container = root.join(BRIDGE_DIR);
+    fs::create_dir_all(&container)
+        .map_err(|err| format!("failed to create bridge folder: {err}"))?;
+
+    let normalized = path_to_string(&root);
+    let (created_at, whole_vault, last_imported_at) = match read_bridge_config(&app) {
+        Some(existing) if existing.path == normalized => {
+            (existing.created_at, existing.whole_vault, existing.last_imported_at)
+        }
+        _ => (unix_timestamp().unwrap_or(0), false, HashMap::new()),
+    };
+    let label = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Cross-OS vault")
+        .to_string();
+
+    let config = BridgeConfig {
+        path: normalized,
+        label,
+        created_at,
+        whole_vault,
+        last_imported_at,
+    };
+
+    let _ = write_json_file(
+        &container.join("bridge.json"),
+        &serde_json::json!({ "createdAt": config.created_at, "label": config.label }),
+    );
+    write_bridge_config(&app, &config)?;
+    Ok(config)
+}
+
+#[tauri::command]
+fn get_bridge(app: AppHandle) -> Option<BridgeConfig> {
+    read_bridge_config(&app)
+}
+
+#[tauri::command]
+fn clear_bridge(app: AppHandle) -> Result<(), String> {
+    let path = bridge_config_path(&app)?;
+    if path.exists() {
+        fs::remove_file(&path).map_err(|err| format!("failed to clear cross-OS vault: {err}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_bridge_options(app: AppHandle, whole_vault: bool) -> Result<BridgeConfig, String> {
+    let mut config =
+        read_bridge_config(&app).ok_or_else(|| "no cross-OS vault configured".to_string())?;
+    config.whole_vault = whole_vault;
+    write_bridge_config(&app, &config)?;
+    Ok(config)
+}
+
+#[tauri::command]
+fn bridge_status(app: AppHandle) -> BridgeStatus {
+    let config = match read_bridge_config(&app) {
+        Some(config) => config,
+        None => {
+            return BridgeStatus {
+                configured: false,
+                path: None,
+                writable: false,
+                peer_count: 0,
+                message: "No cross-OS vault selected.".to_string(),
+            }
+        }
+    };
+
+    let root = PathBuf::from(&config.path);
+    if !root.is_dir() {
+        return BridgeStatus {
+            configured: true,
+            path: Some(config.path),
+            writable: false,
+            peer_count: 0,
+            message: "Location not found — is the partition mounted?".to_string(),
+        };
+    }
+
+    let writable = probe_writable(&root).is_ok();
+    let peer_count = count_bridge_snapshots(&root.join(BRIDGE_DIR));
+    let message = if writable {
+        format!("Ready · {peer_count} snapshot(s) present.")
+    } else {
+        "Location is read-only — Windows Fast Startup may have left it dirty.".to_string()
+    };
+
+    BridgeStatus {
+        configured: true,
+        path: Some(config.path),
+        writable,
+        peer_count,
+        message,
+    }
+}
+
+#[tauri::command]
+fn push_to_bridge(app: AppHandle, vault_path: String) -> Result<BridgePushResult, String> {
+    let vault = validate_vault(&vault_path)?;
+    let config =
+        read_bridge_config(&app).ok_or_else(|| "no cross-OS vault configured".to_string())?;
+    let root = PathBuf::from(&config.path);
+    if !root.is_dir() {
+        return Err("cross-OS location not found — is the partition mounted?".to_string());
+    }
+    probe_writable(&root)?;
+
+    let device = read_device_identity(&vault)?;
+    let created_at = unix_timestamp()?;
+    let container = root.join(BRIDGE_DIR);
+    fs::create_dir_all(&container)
+        .map_err(|err| format!("failed to create bridge folder: {err}"))?;
+
+    let note_paths = if config.whole_vault {
+        collect_vault_notes(&vault)?
+    } else {
+        read_sync_manifest(&vault)?.selected_notes
+    };
+
+    // Stage into a sibling folder and swap it in, so a crash mid-write never
+    // replaces a good snapshot with a partial one.
+    let staging = container.join(format!("{}.staging", device.device_id));
+    if staging.exists() {
+        fs::remove_dir_all(&staging)
+            .map_err(|err| format!("failed to clear staging folder: {err}"))?;
+    }
+    fs::create_dir_all(&staging)
+        .map_err(|err| format!("failed to create staging folder: {err}"))?;
+
+    let exported_count =
+        build_package_into(&vault, &staging, &note_paths, &device, created_at)?;
+
+    let final_dir = container.join(&device.device_id);
+    if final_dir.exists() {
+        fs::remove_dir_all(&final_dir)
+            .map_err(|err| format!("failed to replace previous snapshot: {err}"))?;
+    }
+    fs::rename(&staging, &final_dir)
+        .map_err(|err| format!("failed to publish snapshot: {err}"))?;
+
+    Ok(BridgePushResult {
+        device_id: device.device_id,
+        exported_count,
+        path: path_to_string(&final_dir),
+    })
+}
+
+#[tauri::command]
+fn pull_from_bridge(app: AppHandle, vault_path: String) -> Result<BridgePullResult, String> {
+    let vault = validate_vault(&vault_path)?;
+    let mut config =
+        read_bridge_config(&app).ok_or_else(|| "no cross-OS vault configured".to_string())?;
+    let root = PathBuf::from(&config.path);
+    if !root.is_dir() {
+        return Err("cross-OS location not found — is the partition mounted?".to_string());
+    }
+    let container = root.join(BRIDGE_DIR);
+    let local_device = read_device_identity(&vault)?;
+
+    let mut imported_count = 0;
+    let mut skipped_count = 0;
+    let mut conflicts: Vec<String> = Vec::new();
+    let mut from_devices: Vec<String> = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(&container) {
+        for entry in entries.flatten() {
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let name = match entry.file_name().into_string() {
+                Ok(name) => name,
+                Err(_) => continue,
+            };
+            if name == local_device.device_id || name.ends_with(".staging") {
+                continue;
+            }
+
+            let package_dir = entry.path();
+            let manifest_path = package_dir.join("crossnotes-sync-package.json");
+            if !manifest_path.is_file() {
+                continue;
+            }
+            let manifest: SyncPackageManifest = match read_json_file(&manifest_path) {
+                Ok(manifest) => manifest,
+                Err(_) => continue,
+            };
+
+            let already = config.last_imported_at.get(&name).copied().unwrap_or(0);
+            if manifest.created_at <= already {
+                continue;
+            }
+
+            let result = import_package_from_dir(&vault, &package_dir, &local_device.device_id)?;
+            imported_count += result.imported_count;
+            skipped_count += result.skipped_count;
+            conflicts.extend(result.conflicts);
+            from_devices.push(manifest.source_device.device_name);
+            config.last_imported_at.insert(name, manifest.created_at);
+        }
+    }
+
+    write_bridge_config(&app, &config)?;
+    Ok(BridgePullResult {
+        imported_count,
+        skipped_count,
+        conflict_count: conflicts.len(),
+        conflicts,
+        from_devices,
+    })
+}
+
 #[tauri::command]
 fn send_lan_sync_package(
     peer_host: String,
@@ -1353,7 +1780,15 @@ pub fn run() {
             cancel_pairing,
             pair_with_code,
             get_trusted_devices,
-            send_lan_sync_package
+            send_lan_sync_package,
+            detect_bridge_candidates,
+            set_bridge,
+            get_bridge,
+            clear_bridge,
+            set_bridge_options,
+            bridge_status,
+            push_to_bridge,
+            pull_from_bridge
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

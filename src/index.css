@@ -267,6 +267,29 @@ button:disabled {
     font-size: 11px;
     line-height: 1.45;
     color: var(--text-faint);
+    word-break: break-word;
+}
+
+.sync-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.sync-toggle-row input {
+    accent-color: var(--accent);
+}
+
+.sync-suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
 }
 
 .sidebar-footer {
