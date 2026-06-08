@@ -292,6 +292,16 @@ button:disabled {
     border-radius: 8px;
 }
 
+.sync-caution {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--danger);
+    padding: 8px;
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+
 .sidebar-footer {
     font-size: 11px;
     color: var(--text-faint);

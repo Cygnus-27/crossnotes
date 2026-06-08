@@ -110,10 +110,46 @@ For two devices that are powered on at the same time (PC ↔ PC, PC ↔ Mac, PC 
 
 Two operating systems on one machine are never running at the same time, so network sync can't apply. Instead, CrossNotes exchanges **snapshots through a folder both OSes can read** (e.g. the Windows NTFS partition, or a shared exFAT/NTFS data partition).
 
+> ## ⚠️ Read this before creating the shared partition (dual-boot)
+>
+> **Do not use Windows Disk Management to create or resize the shared partition on a dual-boot disk.** It has been observed to corrupt the **primary GPT header**, which drops Linux into **emergency mode** on the next boot.
+>
+> **Create the shared partition from Linux with [GParted](https://gparted.org/)** (or `gdisk`) instead — from a live USB if you're shrinking a partition that's currently in use. exFAT or NTFS both work as the shared filesystem.
+>
+> **After creating it, verify GPT health from Linux** (read-only — these never modify the disk; confirm the device name with `lsblk` first).
+>
+> Always available (util-linux):
+> ```bash
+> sudo sfdisk --verify /dev/nvme0n1     # read-only: "looks OK" if healthy
+> sudo fdisk  -l       /dev/nvme0n1     # warns explicitly if the primary GPT is corrupt
+> ```
+> For an explicit "Main/Backup GPT header: OK" report, install `gptfdisk` (Arch/CachyOS: `sudo pacman -S gptfdisk`, Debian/Ubuntu: `sudo apt install gdisk`) and run:
+> ```bash
+> sudo sgdisk --verify /dev/nvme0n1
+> sudo gdisk  -l       /dev/nvme0n1
+> ```
+>
+> **If Linux already dropped to emergency mode (corrupt primary GPT):** when the primary header is damaged but the backup is intact, rebuild it from the backup with `gdisk` (install `gptfdisk` first). `gdisk` only writes to the disk on `w`; everything before it is inspection.
+> ```bash
+> sudo gdisk /dev/nvme0n1
+>   r      # recovery & transformation menu
+>   b      # rebuild the main GPT header from the backup
+>   w      # write the corrected table to disk, then confirm: y
+> ```
+> Then reboot. (Always double-check the device with `lsblk` — writing to the wrong disk is destructive.)
+
+**Steps**
+
 1. **One-time (Windows):** disable **Fast Startup / hibernation** so Linux can mount the Windows partition read-write safely. CrossNotes refuses to write to a read-only/dirty location rather than risk corruption.
-2. In **LAN Sync → Cross-OS vault**, click **Choose shared folder…** and pick a folder both OSes can see (the *same physical folder*, even though its path differs per OS — e.g. `D:\Notes` on Windows vs `/run/media/<you>/Data/Notes` on Linux). If CrossNotes detects an existing cross-OS vault, it suggests it inline.
+2. In **LAN Sync → Cross-OS vault**, click **Choose shared folder…** and pick a folder both OSes can see (the *same physical folder*, even though its path differs per OS — e.g. a partition labeled `PORTAL` is `Z:\Notes` on Windows vs `/run/media/<you>/PORTAL/Notes` on Linux). If CrossNotes finds an existing cross-OS vault (even one folder deep), it suggests it inline.
 3. Toggle **Sync the whole vault** on for everything, or leave it off to sync only the ○-selected notes.
 4. **Push** writes a snapshot of this OS's notes to the shared folder. Reboot into the other OS and **Pull** to import anything newer. Each OS keeps its own independent local vault; the shared folder is only a courier.
+
+**Optional — auto-mount the shared partition on Linux.** If you add an `/etc/fstab` entry so the partition mounts at a fixed path, **always include `nofail`** so a missing or unmountable partition can never block boot (and a short device timeout so boot isn't delayed). Get the UUID with `sudo blkid /dev/nvme0n1p5`:
+```fstab
+# nofail = never block boot if the partition is absent/unmountable
+UUID=<PORTAL-UUID>  /mnt/PORTAL  ntfs3  defaults,nofail,x-systemd.device-timeout=5s,uid=1000,gid=1000  0 0
+```
 
 ---
 

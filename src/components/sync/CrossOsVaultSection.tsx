@@ -130,6 +130,11 @@ export const CrossOsVaultSection: React.FC = () => {
             Sync between two OSes on one machine (e.g. Windows + Linux dual
             boot) through a folder both can read.
           </p>
+          <p className="sync-caution">
+            ⚠ Create the shared partition with <strong>GParted</strong> from
+            Linux — not Windows Disk Management, which can corrupt the GPT and
+            break Linux boot. See the README before partitioning.
+          </p>
           {suggestions.length > 0 && (
             <div className="sync-suggestion">
               <span className="sync-panel-footnote">

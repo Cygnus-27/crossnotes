@@ -1066,16 +1066,43 @@ fn detect_bridge_candidates() -> Vec<BridgeCandidate> {
         if !seen.insert(path.clone()) || !root.is_dir() {
             continue;
         }
-        let label = root
+        let volume_label = root
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or(&path)
             .to_string();
         out.push(BridgeCandidate {
             has_existing_bridge: root.join(BRIDGE_DIR).is_dir(),
-            label,
-            path,
+            label: volume_label.clone(),
+            path: path.clone(),
         });
+
+        // Look one level deep for an existing bridge in a subfolder (e.g.
+        // PORTAL/Notes) so it can be picked directly on either OS.
+        if let Ok(entries) = fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                if !entry.path().join(BRIDGE_DIR).is_dir() {
+                    continue;
+                }
+                let child_path = path_to_string(&entry.path());
+                if !seen.insert(child_path.clone()) {
+                    continue;
+                }
+                let child_name = entry
+                    .file_name()
+                    .to_str()
+                    .unwrap_or("Notes")
+                    .to_string();
+                out.push(BridgeCandidate {
+                    has_existing_bridge: true,
+                    label: format!("{volume_label}/{child_name}"),
+                    path: child_path,
+                });
+            }
+        }
     }
     out
 }
