@@ -1,6 +1,6 @@
 # CrossNotes
 
-crossnotes is a work-in-progress keyboard-first cross-platform markdown note-taking application built for deep focus and high-performance workflows. Eliminating the friction between your thoughts and the screen, CrossNotes allows you to manage your entire vault without ever touching your mouse. 
+CrossNotes is a work-in-progress keyboard-first cross-platform markdown note-taking application built for deep focus and high-performance workflows. Eliminating the friction between your thoughts and the screen, CrossNotes allows you to manage your entire vault without ever touching your mouse. 
 
 ---
 
@@ -34,7 +34,7 @@ crossnotes is a work-in-progress keyboard-first cross-platform markdown note-tak
 
 ### Prerequisites (all platforms)
 
-- **Node.js** 18+ and npm
+- **Node.js** 20.19+ or 22.12+ and npm (required by Vite 7)
 - **Rust** (stable) via [rustup](https://rustup.rs)
 - Platform build tooling for Tauri 2:
   - **Linux**: `webkit2gtk4.1`, `libappindicator`/`ayatana-appindicator`, `librsvg`, `base-devel`/`build-essential` (see the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/)).
@@ -54,16 +54,14 @@ npm run tauri dev
 
 ### Linux (Arch / CachyOS / Fedora / Ubuntu)
 
-#### 1. Binary Execution (Fastest)
-The optimized release binary is located at `./src-tauri/target/release/crossnotes`.
+1. `git clone https://github.com/Cygnus-27/crossnotes && cd crossnotes`
+2. `npm install`
+3. `npm run tauri build`
+4. Run the optimized binary at `./src-tauri/target/release/crossnotes` — or use `npm run tauri dev` while developing.
 
-#### 2. Native Build
-1. Clone the repository: `git clone https://github.com/Cygnus-27/crossnotes`
-2. Install dependencies: `npm install`
-3. Build the binary: `npm run tauri build`
-4. Run: `./src-tauri/target/release/crossnotes`
+> The repository does not ship prebuilt binaries; the binary above is produced by step 3.
 
-**Desktop Integration:**
+**Desktop Integration** (after building):
 
 For **fish** shell:
 ```fish
@@ -110,10 +108,65 @@ For two devices that are powered on at the same time (PC ↔ PC, PC ↔ Mac, PC 
 
 Two operating systems on one machine are never running at the same time, so network sync can't apply. Instead, CrossNotes exchanges **snapshots through a folder both OSes can read** (e.g. the Windows NTFS partition, or a shared exFAT/NTFS data partition).
 
-1. **One-time (Windows):** disable **Fast Startup / hibernation** so Linux can mount the Windows partition read-write safely. CrossNotes refuses to write to a read-only/dirty location rather than risk corruption.
-2. In **LAN Sync → Cross-OS vault**, click **Choose shared folder…** and pick a folder both OSes can see (the *same physical folder*, even though its path differs per OS — e.g. `D:\Notes` on Windows vs `/run/media/<you>/Data/Notes` on Linux). If CrossNotes detects an existing cross-OS vault, it suggests it inline.
-3. Toggle **Sync the whole vault** on for everything, or leave it off to sync only the ○-selected notes.
-4. **Push** writes a snapshot of this OS's notes to the shared folder. Reboot into the other OS and **Pull** to import anything newer. Each OS keeps its own independent local vault; the shared folder is only a courier.
+> ## ⚠️ Read this before creating the shared partition (dual-boot)
+>
+> **Do not use Windows Disk Management to create or resize the shared partition on a dual-boot disk.** It has been observed to corrupt the **primary GPT header**, which drops Linux into **emergency mode** on the next boot.
+>
+> **Create the shared partition from Linux with [GParted](https://gparted.org/)** (or `gdisk`) instead — from a live USB if you're shrinking a partition that's currently in use. exFAT or NTFS both work as the shared filesystem.
+>
+> **After creating it, verify GPT health from Linux** (read-only — these never modify the disk; confirm the device name with `lsblk` first).
+>
+> Always available (util-linux):
+> ```bash
+> sudo sfdisk --verify /dev/nvme0n1     # read-only: "looks OK" if healthy
+> sudo fdisk  -l       /dev/nvme0n1     # warns explicitly if the primary GPT is corrupt
+> ```
+> For an explicit "Main/Backup GPT header: OK" report, install `gptfdisk` (Arch/CachyOS: `sudo pacman -S gptfdisk`, Debian/Ubuntu: `sudo apt install gdisk`) and run:
+> ```bash
+> sudo sgdisk --verify /dev/nvme0n1
+> sudo gdisk  -l       /dev/nvme0n1
+> ```
+>
+> **If Linux already dropped to emergency mode (corrupt primary GPT):** when the primary header is damaged but the backup is intact, rebuild it from the backup with `gdisk` (install `gptfdisk` first). `gdisk` only writes to the disk on `w`; everything before it is inspection.
+> ```bash
+> sudo gdisk /dev/nvme0n1
+>   r      # recovery & transformation menu
+>   b      # rebuild the main GPT header from the backup
+>   w      # write the corrected table to disk, then confirm: y
+> ```
+> Then reboot. (Always double-check the device with `lsblk` — writing to the wrong disk is destructive.)
+
+Setup is a one-time thing per machine. After that, daily use is just **Push** before you reboot out and **Pull** after you reboot in.
+
+#### 1. Create the shared partition (once, from Linux)
+
+Boot Linux (or a [GParted](https://gparted.org/) live USB if you need to shrink the in-use system partition), then in GParted:
+
+1. Shrink an existing partition to free up space (a few hundred MB is plenty for notes).
+2. Create a new partition in the free space, formatted **NTFS** or **exFAT** (both are readable by Windows *and* Linux), and set its label to `PORTAL`.
+3. Apply, then **verify GPT health** using the read-only commands in the box above. Both headers should report OK before you continue.
+
+#### 2. Make PORTAL mountable on each OS
+
+- **Windows:** it auto-assigns a drive letter (e.g. `Z:`). Turn **Fast Startup off** (Control Panel → Power Options → *Choose what the power buttons do*) and run `powercfg /h off` so Linux can mount it read-write. CrossNotes refuses to write to a read-only/dirty volume rather than risk corruption, so this step matters.
+- **Linux — quick:** open PORTAL once in your file manager; it mounts at `/run/media/<you>/PORTAL`.
+- **Linux — smoothest (auto-mount at every boot):** add an `/etc/fstab` entry with **`nofail`** (get the UUID from `sudo blkid /dev/nvme0n1p5`). `nofail` guarantees a missing or unmountable PORTAL can **never** block boot:
+  ```fstab
+  UUID=<PORTAL-UUID>  /mnt/PORTAL  ntfs3  defaults,nofail,x-systemd.device-timeout=5s,uid=1000,gid=1000  0 0
+  ```
+
+#### 3. Point CrossNotes at the shared folder (once per OS)
+
+1. In the sidebar, open **LAN Sync → Cross-OS vault → Choose shared folder…** and pick the **same physical folder** on each OS — e.g. `Z:\Notes` on Windows and `/run/media/<you>/PORTAL/Notes` (or `/mnt/PORTAL/Notes`) on Linux.
+2. After the first OS pushes a snapshot, the *other* OS **auto-suggests that folder** ("PORTAL/Notes", detected even one level deep) — just click the suggestion.
+3. Optionally toggle **Sync the whole vault** (off = only the ○-selected notes are synced).
+
+#### 4. Everyday sync
+
+- **Before rebooting out** of an OS: click **Push** — it writes a snapshot of this OS's notes (and any referenced attachments) to PORTAL.
+- **After rebooting into** the other OS: click **Pull** — it imports anything newer.
+
+Each OS keeps its own independent local vault; PORTAL is only the courier. A **Pull** with nothing new reports *"Already up to date."* If you edit the *same* note on both OSes before syncing, the incoming copy is saved alongside as `…conflict-….md` rather than overwriting your local version — no edit is ever lost.
 
 ---
 

@@ -1066,16 +1066,43 @@ fn detect_bridge_candidates() -> Vec<BridgeCandidate> {
         if !seen.insert(path.clone()) || !root.is_dir() {
             continue;
         }
-        let label = root
+        let volume_label = root
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or(&path)
             .to_string();
         out.push(BridgeCandidate {
             has_existing_bridge: root.join(BRIDGE_DIR).is_dir(),
-            label,
-            path,
+            label: volume_label.clone(),
+            path: path.clone(),
         });
+
+        // Look one level deep for an existing bridge in a subfolder (e.g.
+        // PORTAL/Notes) so it can be picked directly on either OS.
+        if let Ok(entries) = fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                if !entry.path().join(BRIDGE_DIR).is_dir() {
+                    continue;
+                }
+                let child_path = path_to_string(&entry.path());
+                if !seen.insert(child_path.clone()) {
+                    continue;
+                }
+                let child_name = entry
+                    .file_name()
+                    .to_str()
+                    .unwrap_or("Notes")
+                    .to_string();
+                out.push(BridgeCandidate {
+                    has_existing_bridge: true,
+                    label: format!("{volume_label}/{child_name}"),
+                    path: child_path,
+                });
+            }
+        }
     }
     out
 }
@@ -1792,4 +1819,196 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        let unique = format!(
+            "crossnotes-test-{tag}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        dir.push(unique);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn device(id: &str) -> DeviceIdentity {
+        DeviceIdentity {
+            device_id: id.to_string(),
+            device_name: id.to_string(),
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn round_trip_note_with_attachment() {
+        let vault_a = temp_dir("rt-a");
+        let vault_b = temp_dir("rt-b");
+        let pkg = temp_dir("rt-pkg");
+
+        let body = "# Note\n![pic](./Attachments/pic.png)\n";
+        fs::write(vault_a.join("note.md"), body).unwrap();
+        fs::create_dir_all(vault_a.join("Attachments")).unwrap();
+        fs::write(vault_a.join("Attachments/pic.png"), b"PNGDATA").unwrap();
+
+        let exported =
+            build_package_into(&vault_a, &pkg, &["note.md".to_string()], &device("dev-A"), 1000)
+                .unwrap();
+        assert_eq!(exported, 1, "one note exported");
+        assert!(pkg.join("note.md").is_file());
+        assert!(
+            pkg.join("Attachments/pic.png").is_file(),
+            "attachment bundled with the note"
+        );
+
+        let result = import_package_from_dir(&vault_b, &pkg, "dev-B").unwrap();
+        assert_eq!(result.imported_count, 2, "note + attachment imported");
+        assert_eq!(result.conflict_count, 0);
+        assert_eq!(fs::read_to_string(vault_b.join("note.md")).unwrap(), body);
+        assert_eq!(
+            fs::read(vault_b.join("Attachments/pic.png")).unwrap(),
+            b"PNGDATA"
+        );
+
+        let _ = fs::remove_dir_all(&vault_a);
+        let _ = fs::remove_dir_all(&vault_b);
+        let _ = fs::remove_dir_all(&pkg);
+    }
+
+    #[test]
+    fn conflicting_note_is_preserved_not_clobbered() {
+        let vault_a = temp_dir("cf-a");
+        let vault_b = temp_dir("cf-b");
+        let pkg = temp_dir("cf-pkg");
+
+        fs::write(vault_a.join("note.md"), "incoming version").unwrap();
+        fs::write(vault_b.join("note.md"), "existing version").unwrap();
+        build_package_into(&vault_a, &pkg, &["note.md".to_string()], &device("dev-A"), 1000)
+            .unwrap();
+
+        let result = import_package_from_dir(&vault_b, &pkg, "dev-B").unwrap();
+        assert_eq!(result.conflict_count, 1, "difference becomes a conflict");
+        assert_eq!(
+            fs::read_to_string(vault_b.join("note.md")).unwrap(),
+            "existing version",
+            "the local note is never overwritten"
+        );
+        let conflict_written = fs::read_dir(&vault_b)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().contains(".conflict-"));
+        assert!(conflict_written, "a .conflict- copy is written");
+
+        let _ = fs::remove_dir_all(&vault_a);
+        let _ = fs::remove_dir_all(&vault_b);
+        let _ = fs::remove_dir_all(&pkg);
+    }
+
+    #[test]
+    fn identical_note_is_skipped() {
+        let vault_a = temp_dir("sk-a");
+        let vault_b = temp_dir("sk-b");
+        let pkg = temp_dir("sk-pkg");
+
+        fs::write(vault_a.join("note.md"), "same bytes").unwrap();
+        fs::write(vault_b.join("note.md"), "same bytes").unwrap();
+        build_package_into(&vault_a, &pkg, &["note.md".to_string()], &device("dev-A"), 1000)
+            .unwrap();
+
+        let result = import_package_from_dir(&vault_b, &pkg, "dev-B").unwrap();
+        assert_eq!(result.imported_count, 0);
+        assert_eq!(result.skipped_count, 1, "identical content is skipped");
+        assert_eq!(result.conflict_count, 0);
+
+        let _ = fs::remove_dir_all(&vault_a);
+        let _ = fs::remove_dir_all(&vault_b);
+        let _ = fs::remove_dir_all(&pkg);
+    }
+
+    #[test]
+    fn self_import_is_rejected() {
+        let vault = temp_dir("self-v");
+        let pkg = temp_dir("self-pkg");
+        fs::write(vault.join("note.md"), "x").unwrap();
+        build_package_into(&vault, &pkg, &["note.md".to_string()], &device("dev-X"), 1).unwrap();
+
+        // Importing a package whose source device == local device must fail.
+        assert!(import_package_from_dir(&vault, &pkg, "dev-X").is_err());
+
+        let _ = fs::remove_dir_all(&vault);
+        let _ = fs::remove_dir_all(&pkg);
+    }
+
+    #[test]
+    fn attachment_paths_extracted_and_path_safe() {
+        let md = "![a](./Attachments/a.png) [b](Attachments/b%20c.pdf) ![x](./Attachments/../secret.png)";
+        let found = collect_attachment_paths(md);
+        assert!(found.contains(&"Attachments/a.png".to_string()));
+        assert!(
+            found.contains(&"Attachments/b c.pdf".to_string()),
+            "percent-encoding is decoded"
+        );
+        assert!(
+            !found.iter().any(|p| p.contains("..")),
+            "traversal references are dropped"
+        );
+    }
+
+    #[test]
+    fn relative_sync_paths_are_validated() {
+        assert!(validate_relative_sync_path("note.md").is_ok());
+        assert!(validate_relative_sync_path("Attachments/pic.png").is_ok());
+        assert!(validate_relative_sync_path("../escape.md").is_err());
+        assert!(validate_relative_sync_path("/abs.md").is_err());
+        assert!(validate_relative_sync_path(".crossnotes/device.json").is_err());
+        assert!(validate_relative_sync_path("note.txt").is_err());
+    }
+
+    #[test]
+    fn whole_vault_lists_only_top_level_markdown() {
+        let vault = temp_dir("wv");
+        fs::write(vault.join("b.md"), "b").unwrap();
+        fs::write(vault.join("a.md"), "a").unwrap();
+        fs::write(vault.join("c.txt"), "c").unwrap();
+        let notes = collect_vault_notes(&vault).unwrap();
+        assert_eq!(notes, vec!["a.md".to_string(), "b.md".to_string()]);
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    /// Manual integration harness: imports a real bridge package directory
+    /// (e.g. one produced by the other OS) into a throwaway vault, proving an
+    /// end-to-end cross-OS pull. Run with:
+    ///   CROSSNOTES_TEST_PACKAGE=/path/to/.crossnotes-bridge/<deviceId> \
+    ///     cargo test --lib import_external_package_from_env -- --ignored --nocapture
+    #[test]
+    #[ignore = "manual: set CROSSNOTES_TEST_PACKAGE to a real bridge package dir"]
+    fn import_external_package_from_env() {
+        let pkg = match std::env::var("CROSSNOTES_TEST_PACKAGE") {
+            Ok(path) => PathBuf::from(path),
+            Err(_) => return,
+        };
+        let vault = temp_dir("ext-import");
+        let result = import_package_from_dir(&vault, &pkg, "linux-local-test").unwrap();
+        println!(
+            "imported={} skipped={} conflicts={} from={}",
+            result.imported_count,
+            result.skipped_count,
+            result.conflict_count,
+            result.source_device_id
+        );
+        for entry in fs::read_dir(&vault).unwrap().flatten() {
+            println!("  -> {}", entry.file_name().to_string_lossy());
+        }
+        assert!(result.imported_count >= 1, "at least one note imported");
+        let _ = fs::remove_dir_all(&vault);
+    }
 }
