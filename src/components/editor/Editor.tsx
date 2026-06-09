@@ -394,6 +394,7 @@ export const Editor: React.FC = () => {
           ...historyKeymap,
         ]),
         vim(),
+        EditorView.lineWrapping,
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),

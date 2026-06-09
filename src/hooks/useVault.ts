@@ -9,6 +9,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { useNoteStore, Note } from "../store/noteStore";
 import { useVaultStore } from "../store/vaultStore";
+import { FavoriteNote, useFavoritesStore } from "../store/favoritesStore";
 import { useEffect, useCallback } from "react";
 
 export const useVault = () => {
@@ -239,6 +240,36 @@ export const useVault = () => {
     [setActiveNote],
   );
 
+  const openFavorite = useCallback(
+    async (favorite: FavoriteNote) => {
+      const currentVaultPath = useVaultStore.getState().vaultPath;
+
+      // A favorite may live in a different vault. Only follow it across vaults
+      // when the user has opted into that behaviour.
+      if (favorite.vaultPath !== currentVaultPath) {
+        if (!useFavoritesStore.getState().switchVaultOnOpen) return;
+        setVaultPath(favorite.vaultPath);
+        await loadNotes(favorite.vaultPath);
+      }
+
+      try {
+        const content = await readTextFile(favorite.path);
+        setActiveNote({
+          path: favorite.path,
+          name: favorite.name,
+          content,
+        });
+        const index = useNoteStore
+          .getState()
+          .notes.findIndex((note) => note.path === favorite.path);
+        if (index >= 0) useNoteStore.getState().setSelectedNoteIndex(index);
+      } catch (err) {
+        console.error("Failed to open favorite:", err);
+      }
+    },
+    [loadNotes, setActiveNote, setVaultPath],
+  );
+
   useEffect(() => {
     if (!vaultPath) {
       resetWorkspace();
@@ -269,6 +300,7 @@ export const useVault = () => {
     useDefaultVault,
     loadNotes,
     openNote,
+    openFavorite,
     saveNote,
     deleteNote,
     createNote,

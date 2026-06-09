@@ -7,6 +7,8 @@ import {
   useNoteVisualStore,
 } from "../../store/noteVisualStore";
 import { useSync } from "../../hooks/useSync";
+import { useFavoritesStore } from "../../store/favoritesStore";
+import { useVaultStore } from "../../store/vaultStore";
 
 export const NoteTree: React.FC = () => {
   const {
@@ -20,6 +22,9 @@ export const NoteTree: React.FC = () => {
   const { focusedElement } = useUIStore();
   const { getMarker, setMarker } = useNoteVisualStore();
   const { isNoteSelected, setNoteSyncEnabled } = useSync();
+  const vaultPath = useVaultStore((state) => state.vaultPath);
+  const favorites = useFavoritesStore((state) => state.favorites);
+  const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
   const [openMarkerFor, setOpenMarkerFor] = useState<string | null>(null);
 
   return (
@@ -31,6 +36,7 @@ export const NoteTree: React.FC = () => {
         const showDirty = isActive && isDirty;
         const marker = getMarker(note.path);
         const syncSelected = isNoteSelected(note.path);
+        const isFavorite = favorites.some((fav) => fav.path === note.path);
         const className = [
           "note-item",
           isActive ? "is-active" : "",
@@ -89,6 +95,29 @@ export const NoteTree: React.FC = () => {
             </div>
             <span className="note-item-name">{note.name}</span>
             {showDirty && <span className="note-item-dirty" />}
+            <button
+              type="button"
+              className={`note-fav-button ${isFavorite ? "is-favorite" : ""}`}
+              title={
+                isFavorite ? "Remove from favorites" : "Add to favorites"
+              }
+              aria-label={
+                isFavorite
+                  ? `Remove ${note.name} from favorites`
+                  : `Add ${note.name} to favorites`
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!vaultPath) return;
+                toggleFavorite({
+                  path: note.path,
+                  name: note.name,
+                  vaultPath,
+                });
+              }}
+            >
+              {isFavorite ? "★" : "☆"}
+            </button>
             <button
               type="button"
               className={`note-sync-button ${syncSelected ? "is-selected" : ""}`}

@@ -77,7 +77,7 @@ export const SyncPanel: React.FC = () => {
 
           <div className="sync-action-group">
             <span className="sync-group-label">This device</span>
-            <div className="sidebar-card-actions">
+            <div className="button-row">
               <button
                 type="button"
                 className="primary-button"
@@ -91,7 +91,7 @@ export const SyncPanel: React.FC = () => {
 
           <div className="sync-action-group">
             <span className="sync-group-label">Devices</span>
-            <div className="sidebar-card-actions">
+            <div className="button-row">
               <button
                 type="button"
                 className="primary-button"
@@ -104,7 +104,7 @@ export const SyncPanel: React.FC = () => {
 
           <div className="sync-action-group">
             <span className="sync-group-label">Manual transfer</span>
-            <div className="sidebar-card-actions">
+            <div className="button-row">
               <button
                 type="button"
                 className="secondary-button"

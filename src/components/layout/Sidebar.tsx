@@ -2,6 +2,7 @@ import React from "react";
 import { useUIStore } from "../../store/uiStore";
 import { useVault } from "../../hooks/useVault";
 import { NoteTree } from "../notes/NoteTree";
+import { FavoritesSection } from "../notes/FavoritesSection";
 import { useNoteStore } from "../../store/noteStore";
 import { SyncPanel } from "../sync/SyncPanel";
 
@@ -15,11 +16,9 @@ export const Sidebar: React.FC = () => {
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="sidebar-inner">
-        <div className="sidebar-header-row">
-          <div>
-            <h2 className="section-label">{hasVault ? "Vault" : "Welcome"}</h2>
-          </div>
-          <div className="sidebar-header-actions">
+        <div className="sidebar-section">
+          <h2 className="section-label">{hasVault ? "Vault" : "Welcome"}</h2>
+          <div className="button-row">
             {hasVault && (
               <button
                 type="button"
@@ -46,7 +45,8 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          <FavoritesSection />
           {hasVault && hasNotes ? (
             <NoteTree />
           ) : (
@@ -59,7 +59,7 @@ export const Sidebar: React.FC = () => {
                   ? "This folder is connected, but there are no markdown notes in it yet."
                   : "Choose a folder of markdown notes to turn CrossNotes into your focused local workspace."}
               </p>
-              <div className="sidebar-card-actions">
+              <div className="button-stack">
                 <button
                   type="button"
                   className="primary-button desktop-only"

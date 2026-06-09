@@ -98,7 +98,7 @@ export const CrossOsVaultSection: React.FC = () => {
             <span>Sync the whole vault (off = selected notes only)</span>
           </label>
 
-          <div className="sidebar-card-actions">
+          <div className="button-row">
             <button
               type="button"
               className="primary-button"
@@ -115,6 +115,8 @@ export const CrossOsVaultSection: React.FC = () => {
             >
               {busy === "pull" ? "Pulling…" : "Pull"}
             </button>
+          </div>
+          <div className="button-row">
             <button type="button" className="secondary-button" onClick={browse}>
               Change…
             </button>
@@ -152,7 +154,7 @@ export const CrossOsVaultSection: React.FC = () => {
               ))}
             </div>
           )}
-          <div className="sidebar-card-actions">
+          <div className="button-row">
             <button type="button" className="secondary-button" onClick={browse}>
               Choose shared folder…
             </button>
