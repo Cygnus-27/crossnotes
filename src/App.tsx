@@ -1,162 +1,111 @@
-import "./index.css";
-import { AppShell } from "./components/layout/AppShell";
-import { useShortcuts } from "./hooks/useShortcuts";
-import { useVault } from "./hooks/useVault";
-import { useNoteStore } from "./store/noteStore";
-import { Editor } from "./components/editor/Editor";
-import { CommandPalette } from "./components/palette/CommandPalette";
-import { QuickOpen } from "./components/palette/QuickOpen";
-import { GlobalSearch } from "./components/palette/GlobalSearch";
-import { useCommands } from "./hooks/useCommands";
-import { useSyncListeners } from "./hooks/useSyncListeners";
-import { TabBar } from "./components/layout/TabBar";
-import { Header } from "./components/layout/Header";
-import { ShortcutCheatSheet } from "./components/ui/ShortcutCheatSheet";
-import { SyncStage } from "./components/sync/SyncStage";
-import { useUIStore } from "./store/uiStore";
+import { useEffect } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-function App() {
-  const { openVault, useDefaultVault, vaultPath, createNote } = useVault();
-  const activeNote = useNoteStore((state) => state.activeNote);
-  const notes = useNoteStore((state) => state.notes);
-  const {
-    quickOpenOpen,
-    setQuickOpenOpen,
-    helpOpen,
-    setHelpOpen,
-    globalSearchOpen,
-    setGlobalSearchOpen,
-  } = useUIStore();
+import * as api from "./lib/api";
+import { useAppStore } from "./store/appStore";
+import { Header } from "./components/Header";
+import { DropZone } from "./components/DropZone";
+import { PeerList } from "./components/PeerList";
+import { TransferList } from "./components/TransferList";
+import { OfferDialog } from "./components/OfferDialog";
+import { PairingDialog } from "./components/PairingDialog";
+import { IdentityAlert } from "./components/IdentityAlert";
 
-  useCommands();
-  useSyncListeners();
-  useShortcuts({ onOpenVault: openVault });
+export default function App() {
+  const store = useAppStore();
+  const { offers, pairings, identityWarnings, error } = store;
 
-  const showLanding = !activeNote;
-  const hasVault = Boolean(vaultPath);
-  const hasNotes = notes.length > 0;
+  useEffect(() => {
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
 
-  const promptForNewNote = () => {
-    const name = prompt("Note name:");
-    if (name?.trim()) createNote(name.trim());
-  };
+    async function boot() {
+      try {
+        const [self, peers, trusted, transfers] = await Promise.all([
+          api.getSelf(),
+          api.listPeers(),
+          api.listTrusted(),
+          api.listTransfers(),
+        ]);
+        if (cancelled) return;
+
+        store.setSelf(self);
+        store.setPeers(peers);
+        store.setTransfers(transfers);
+        useAppStore.setState({ trusted });
+      } catch (err) {
+        if (!cancelled) store.setError(String(err));
+      }
+
+      // Subscribe after the initial snapshot so nothing is missed in between.
+      unlisteners.push(
+        await api.onPeersUpdated((peers) => useAppStore.getState().setPeers(peers)),
+        await api.onProgress((progress) =>
+          useAppStore.getState().upsertTransfer(progress),
+        ),
+        await api.onOffer((offer) => useAppStore.getState().pushOffer(offer)),
+        await api.onPairing((request) => useAppStore.getState().pushPairing(request)),
+        await api.onIdentityWarning((warning) =>
+          useAppStore.getState().pushIdentityWarning(warning),
+        ),
+      );
+
+      // Tauri's own drag-drop event carries real filesystem paths; the HTML5
+      // one does not, which is why this does not use onDrop.
+      const webview = await getCurrentWebview();
+      unlisteners.push(
+        await webview.onDragDropEvent((event) => {
+          if (event.payload.type === "drop") {
+            useAppStore.getState().stage(event.payload.paths);
+          }
+        }),
+      );
+    }
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((off) => off());
+    };
+    // Runs once: the store is read through getState inside the callbacks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <AppShell>
-      <CommandPalette />
-      <QuickOpen isOpen={quickOpenOpen} setIsOpen={setQuickOpenOpen} />
-      <GlobalSearch isOpen={globalSearchOpen} setIsOpen={setGlobalSearchOpen} />
-      <ShortcutCheatSheet
-        isOpen={helpOpen}
-        onClose={() => setHelpOpen(false)}
-      />
-      <SyncStage />
+    <div className="app">
       <Header />
-      <TabBar />
-      {!showLanding ? (
-        <div className="editor-stage">
-          <Editor />
-        </div>
-      ) : (
-        <div className="empty-state">
-          <section className="empty-page">
-            <div className="empty-kicker">CrossNotes</div>
-            <h1 className="empty-title">
-              {hasVault && !hasNotes
-                ? "A quiet vault, waiting for its first note."
-                : "A quiet workspace for markdown notes."}
-            </h1>
-            <p className="empty-subtitle">
-              {hasVault && !hasNotes
-                ? "This folder is connected, but it does not contain any .md files yet. Add a markdown file here or switch to a vault that already has notes."
-                : "Open a folder of markdown files and keep your writing local. The sync layer is being designed around deliberate device-to-device transfer, not a cloud account."}
-            </p>
 
-            <div className="empty-actions">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={
-                  hasVault && !hasNotes ? promptForNewNote : useDefaultVault
-                }
-              >
-                {hasVault && !hasNotes
-                  ? "Create first note"
-                  : hasVault
-                    ? "Use app vault"
-                    : "Use app vault"}
-              </button>
-              {hasVault && !hasNotes && (
-                <button
-                  type="button"
-                  className="secondary-button desktop-only"
-                  onClick={openVault}
-                >
-                  Choose another vault
-                </button>
-              )}
-              <button
-                type="button"
-                className="secondary-button desktop-only"
-                onClick={openVault}
-              >
-                Open folder vault
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setHelpOpen(true)}
-              >
-                View shortcuts
-              </button>
-            </div>
+      {identityWarnings.map((warning) => (
+        <IdentityAlert key={warning.peerDeviceId} warning={warning} />
+      ))}
 
-            <div className="empty-grid">
-              <article className="empty-panel">
-                <span className="panel-index">01</span>
-                <h2>Local first</h2>
-                <p>
-                  Your vault is just a folder. Notes stay readable as plain
-                  markdown files.
-                </p>
-              </article>
-              <article className="empty-panel">
-                <span className="panel-index">02</span>
-                <h2>Keyboard ready</h2>
-                <p>
-                  Use quick open, global search, command palette, and Vim
-                  editing without leaving the flow.
-                </p>
-              </article>
-              <article className="empty-panel">
-                <span className="panel-index">03</span>
-                <h2>Sync direction</h2>
-                <p>
-                  Next up: pair nearby devices and exchange changes directly
-                  over your local network.
-                </p>
-              </article>
-            </div>
-
-            <div className="empty-shortcuts">
-              <div className="empty-shortcut">
-                <span className="keyboard-hint">Ctrl + O</span>
-                <span>{hasVault ? "Switch vault" : "Open a vault"}</span>
-              </div>
-              <div className="empty-shortcut">
-                <span className="keyboard-hint">Ctrl + P</span>
-                <span>Quick open</span>
-              </div>
-              <div className="empty-shortcut">
-                <span className="keyboard-hint">Ctrl + K</span>
-                <span>Commands</span>
-              </div>
-            </div>
-          </section>
+      {error && (
+        <div className="banner banner--error" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => store.setError(null)}>
+            Dismiss
+          </button>
         </div>
       )}
-    </AppShell>
+
+      <main className="layout">
+        <section className="column">
+          <DropZone />
+          <PeerList />
+        </section>
+        <section className="column">
+          <TransferList />
+        </section>
+      </main>
+
+      {/* One modal at a time, oldest first, so a queue of prompts is answered
+          in the order the requests arrived. */}
+      {pairings.length > 0 ? (
+        <PairingDialog request={pairings[0]} />
+      ) : offers.length > 0 ? (
+        <OfferDialog offer={offers[0]} />
+      ) : null}
+    </div>
   );
 }
-
-export default App;

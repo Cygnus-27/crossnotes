@@ -7,5 +7,5 @@ fn main() {
         std::env::set_var("GDK_BACKEND", "x11");
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
-    crossnotes_lib::run()
+    fluqsr_lib::run()
 }

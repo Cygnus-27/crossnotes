@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CrossNotes",
+  "productName": "fluqsr",
   "version": "0.1.0",
-  "identifier": "com.cygnus.crossnotes",
+  "identifier": "com.cygnus.fluqsr",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,27 +12,17 @@
   "app": {
     "windows": [
       {
-        "title": "CrossNotes",
-        "width": 1000,
-        "height": 700,
+        "title": "fluqsr",
+        "width": 940,
+        "height": 680,
+        "minWidth": 520,
+        "minHeight": 480,
         "decorations": true,
-        "transparent": false
+        "dragDropEnabled": true
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "$HOME/**",
-          "$DOCUMENT/**",
-          "$DESKTOP/**",
-          "$DOWNLOAD/**",
-          "$PICTURE/**",
-          "$PUBLIC/**",
-          "$APPDATA/**"
-        ]
-      }
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }
   },
   "bundle": {
@@ -45,8 +35,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "category": "Utilities",
+    "category": "Utility",
     "copyright": "Copyright © 2026",
-    "publisher": "Cygnus"
+    "publisher": "Cygnus",
+    "shortDescription": "Send any file to any device on your network.",
+    "longDescription": "fluqsr moves files between your devices over the local network. Peer-to-peer, end-to-end encrypted, no account and no cloud. Any file type, any size."
   }
 }
